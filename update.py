@@ -69,7 +69,6 @@ if __name__ == '__main__':
 
     # connect to spreadsheet
 
-    # coding: utf-8
     import gspread
     import creds
 
