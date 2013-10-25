@@ -91,6 +91,8 @@ class OSMObject(collections.MutableMapping):
 
 class Accessor(object):
     __cache__ = {}
+    _cache_hits = 0
+    _cache_misses = 0
 
     BASE_URL = "https://www.onlinescoutmanager.co.uk/"
 
@@ -103,7 +105,8 @@ class Accessor(object):
 
     @classmethod
     def __cache_save__(cls, cache_file):
-        pickle.dump(cls.__cache__, cache_file)
+      log.info("Saving cache: (hits = {}, misses = {})".format(cls._cache_hits, cls._cache_misses))
+      pickle.dump(cls.__cache__, cache_file)
 
     @classmethod
     def __cache_load__(cls, cache_file):
@@ -114,10 +117,12 @@ class Accessor(object):
         k = url + repr(data)
         if k in cls.__cache__:
             log.debug('Cache hit')
+            cls._cache_hits += 1
             #log.debug("Cache hit: ({0}) = {1}\n".format(k,
             #                                            cls.__cache__[k]))
             return cls.__cache__[k]
 
+        cls._cache_misses += 1
         #log.debug("Cache miss: ({0})\n"\
         #          "Keys: {1}\n".format(k,
         #                               cls.__cache__.keys()))
@@ -305,8 +310,10 @@ class Member(OSMObject):
             try:
                 return self._record[self._reverse_column_map[key]]
             except:
-                raise AttributeError("%r object has no attribute %r" %
-                                     (type(self).__name__, key))
+                raise KeyError("{!r} object has no attribute {!r}: primary keys {!r}, reverse keys: {!r}".format(
+                  type(self).__name__, key,
+                  self._record.keys(),
+                  self._reverse_column_map.keys()))
 
     def __getitem__(self, key):
         try:
@@ -315,10 +322,11 @@ class Member(OSMObject):
             try:
                 return self._record[self._reverse_column_map[key]]
             except:
-                raise KeyError("%r object has no attribute %r" %
-                               (type(self).__name__, key))
-
-
+                raise KeyError("{!r} object has no attribute {!r}: primary keys {!r}, reverse keys: {!r}".format(
+                  type(self).__name__, key,
+                  self._record.keys(),
+                  self._reverse_column_map.keys()))
+                
         
     def __setitem__(self, key, value):
         try:
@@ -332,11 +340,13 @@ class Member(OSMObject):
                     self._changed_keys.append(self._reverse_column_map[key])
  
             except:
-                raise KeyError("%r object has no attribute %r" %
-                               (type(self).__name__, key))
+                raise KeyError("{!r} object has no attribute {!r}: primary keys {!r}, reverse keys: {!r}".format(
+                  type(self).__name__, key,
+                  self._record.keys(),
+                  self._reverse_column_map.keys()))
 
-            raise KeyError("%r object has no attribute %r" %
-                           (type(self).__name__, key))
+            raise KeyError("{!r} object has no attribute {!r}: avaliable keys: {!r}".format(
+              (type(self).__name__, key, self._record.keys())))
 
     # def remove(self, last_date):
     #     """Remove the member record."""
