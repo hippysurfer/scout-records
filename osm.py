@@ -472,7 +472,7 @@ class Members(OSMObject):
         return new_member
 
 class Section(OSMObject):
-    def __init__(self, osm, accessor, record):
+    def __init__(self, osm, accessor, record, init=True):
         OSMObject.__init__(self, osm, accessor, record)
 
         try:
@@ -481,12 +481,19 @@ class Section(OSMObject):
             log.debug("No extra member columns.")
             self._member_column_map = {}
 
-        self.terms = [term for term in osm.terms(self['sectionid'])
+        if init:
+          self.init()
+
+    def init(self):
+        self.terms = [term for term in self._osm.terms(self['sectionid'])
                       if term.is_active()]
 
         # TODO - report error if terms has more than one entry.
         if len(self.terms) > 1:
-          log.warn("More than 1 term is active, picking last in list")
+          log.warn("{!r}: More than 1 term is active, picking last in list {!r}".format(
+            self['sectionname'],
+            [ (term['name'],term['past']) for term in self.terms ]))
+          sys.exit(0)
 
         if len(self.terms) == 0:
           # If there is no active term it does make sense to gather
@@ -548,25 +555,32 @@ class Section(OSMObject):
 
 
 class OSM(object):
-    def __init__(self, authorisor):
+    def __init__(self, authorisor, sectionid_list = False):
         self._accessor = Accessor(authorisor)
 
         self.sections = {}
         self.section = None
 
-        self.init()
+        self.init(sectionid_list)
 
-    def init(self):
+    def init(self, sectionid_list = False):
         roles = self._accessor('api.php?action=getUserRoles')
 
         self.sections = {}
 
-        for section in [Section(self, self._accessor, role)
+        for section in [Section(self, self._accessor, role, init=False)
                         for role in roles
                         if 'section' in role]:
+          if sectionid_list == False or \
+             section['sectionid'] in sectionid_list:
+            section.init()
             self.sections[section['sectionid']] = section
+            
             if section['isDefault'] == '1':
                 self.section = section
+
+        if self.section == None:
+          self.section = self.sections[-1]
 
         log.info("Default section = {0}, term = {1}".format(
             self.section['sectionname'],
