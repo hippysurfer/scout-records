@@ -30,12 +30,12 @@ DEF_CACHE = "osm.cache"
 DEF_CREDS = "osm.creds"
 
 SECTIONIDS = {'Adult': '18305',
-              #'Paget': '',
-              #'Brown': '',
+              'Paget': '9960',
+              'Brown': '17326',
               'Maclean': '14324',
-              #'Rowallan': "",
+              'Rowallan': '12700',
               'Boswell': '10363',
-              #'Johnson': "",
+              'Johnson': '5882',
               #'Waiting List': ""
             }              
 
@@ -166,7 +166,7 @@ def process_section(name, section_members, spread, mapping, target_wks=YP_WKS):
       #if osm_value == '':
       #   osm_value = None # gs returns None for '' so this make the comparison work.
       if gs_value != osm_value:
-        log.info("Updating (from {}) - [{}, {}, {}] gs value ({}) != osm value ({}) setting to ({})  gs: {!r}\n".format(
+        log.info("Updating (from {}) - [{}, {}, {}] gs value ({!r}) != osm value ({!r}) setting to ({})  gs: {!r}\n".format(
           name, reference, osm_field, gs_field,
           gs_value, 
           osm_value,format_date(osm_value),
@@ -304,12 +304,12 @@ def _main(osm,gc):
   ######  Process YP Sections #################
 
   # read in all of the personal details from each of the OSM sections
-  all_members = {'Paget': [],
-                 'Brown': [],
+  all_members = {'Paget': all_members(SECTIONIDS['Paget']),
+                 'Brown': all_members(SECTIONIDS['Brown']),
                  'Maclean': all_members(SECTIONIDS['Maclean']),
-                 'Rowallan': [],
+                 'Rowallan': all_members(SECTIONIDS['Rowallan']),
                  'Boswell': all_members(SECTIONIDS['Boswell']),
-                 'Johnson': []}
+                 'Johnson': all_members(SECTIONIDS['Johnson'])}
 
   # Make a list of all the leaders
   all_leaders = []
