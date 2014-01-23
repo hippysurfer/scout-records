@@ -29,6 +29,9 @@ log = logging.getLogger(__name__)
 DEF_CACHE = "osm.cache"
 DEF_CREDS = "osm.creds"
 
+MEMBER_SPREADSHEET_NAME = "TestSpread"
+FINANCE_SPREADSHEET_NAME = "Copy of Simplified Membership Master List (Apr 2013 - Mar 2014)"
+
 SECTIONIDS = {'Adult': '18305',
               'Paget': '9960',
               'Brown': '17326',
@@ -68,6 +71,9 @@ ADULT_MAPPING = {'firstname': 'Firstname',
                  'PersonalReference': 'Personal Reference',
                  'Ethnicity':'Ethnicity'}
 
+# Finance spreadsheet
+FIN_HEADER_ROW = 1
+FIN_MAPPING_DETAILS = {'PersonalReference': 'SO UID'}
 
 MAPPING = {'firstname': 'Firstname',
            'lastname': 'Lastname',
@@ -104,6 +110,8 @@ TOP_OFFSET = 3  # Number of rows above the heading row in the gs
 HEADER_ROW = TOP_OFFSET + 1
 YP_WKS = 'Master'
 ADULT_WKS = 'Leaders'
+
+DETAIL_WKS = "Sections In Detail"
 
 OSM_REF_FIELD = 'PersonalReference'
 
@@ -288,9 +296,95 @@ def delete_members(spread, references, wks=YP_WKS):
     for reference in references:
         move_row(reference, wks, del_wks)
 
+def process_finance_spreadsheet(gc, all_yp):
+    import pprint
+
+    fin = gc.open(FINANCE_SPREADSHEET_NAME)
+
+    # Fetch list of personal references from the finance spreadsheet
+    # along with the current "Q4" section.
+    wks = fin.worksheet(DETAIL_WKS)
+    headings = wks.row_values(FIN_HEADER_ROW)
+    fin_references = wks.col_values(
+        1 + headings.index(
+            FIN_MAPPING_DETAILS[OSM_REF_FIELD]))[FIN_HEADER_ROW:]
+
+    # TODO: Parameterise the selection of the current quarter.
+    q4_section = wks.col_values(
+        1 + headings.index('Q4 Sec'))[FIN_HEADER_ROW:]
+
+    # create a map from refs to members for later lookup
+    all_members = {}
+    for name, section_members in all_yp.items():
+        for member in section_members:
+            all_members[member[OSM_REF_FIELD]] = member
+
+    # Create a list of all YP that are not on the finance list.
+    # get list of all references from sections
+    new_members = []
+    for name, section_members in all_yp.items():
+        for member in section_members:
+            if member[OSM_REF_FIELD] not in fin_references:
+                new_members.append(member)
+
+    log.info("New members")
+    with open("new.csv", 'w') as f:
+        f.write("\t".join(list(MAPPING.keys())))
+        f.write("\n")
+        for member in new_members:
+            for k in MAPPING.keys():
+                f.write(str(member[k])+'\t')
+            f.write("\n")
+
+
+    # Create a list of all YP that are on the finance list but are not
+    # in OSM.
+    all_osm_references = []
+    for name, section_members in all_yp.items():
+        all_osm_references.extend([member[OSM_REF_FIELD]
+                                   for member in section_members])
+
+    missing_references = []
+    for ref in fin_references:
+        if ref not in all_osm_references:
+            missing_references.append(ref)
+
+    log.info("Old members")
+    open("missing.csv", 'w').writelines([ l+'\n' for l in missing_references ])
+
+    # Create a list of all YP who are on the finanace list but are not
+    # in the same section in OSM.
+    section_map = {'Maclean': 'MP',
+                   'Rowallan': 'RP',
+                   'Brown': 'BC',
+                   'Boswell': 'BT',
+                   'Johnson': 'JT',
+                   'Paget': 'PC'}
+
+    changed_members = []
+    for name, section_members in all_yp.items():
+        for member in section_members:
+            if member[OSM_REF_FIELD] in fin_references \
+               and section_map[name] != q4_section[fin_references.index(
+                   member[OSM_REF_FIELD])]:
+                changed_members.append((member,
+                                        q4_section[fin_references.index(
+                                            member[OSM_REF_FIELD])],
+                                        section_map[name]))
+
+    with open("changed.csv", 'w') as f:
+        f.write("Personal Reference\tOld\tNew\tFirst\tLast\n")
+        for member in changed_members:
+            f.write("\t".join([
+                member[0][OSM_REF_FIELD],
+                member[1],
+                member[2],
+                all_members[member[0][OSM_REF_FIELD]]['firstname'],
+                all_members[member[0][OSM_REF_FIELD]]['lastname']]))
+            f.write("\n")
 
 def _main(osm, gc):
-    spread = gc.open("TestSpread")
+    spread = gc.open(MEMBER_SPREADSHEET_NAME)
 
     sections = osm.OSM(auth, SECTIONIDS.values())
 
@@ -389,28 +483,30 @@ def _main(osm, gc):
         all_yp_members[cub_section] = remove_senior_duplicates(
             cub_section, scout_members)
 
-    # Process the remaining members
-    for name, section_members in all_yp_members.items():
-        process_section(name, section_members, spread, MAPPING)
+    # # Process the remaining members
+    # for name, section_members in all_yp_members.items():
+    #     process_section(name, section_members, spread, MAPPING)
 
-    # remove deleted members
-    # get list of all references from sections
-    all_references = []
-    for name, section_members in all_yp_members.items():
-        all_references.extend([member[OSM_REF_FIELD]
-                              for member in section_members])
+    # # remove deleted members
+    # # get list of all references from sections
+    # all_references = []
+    # for name, section_members in all_yp_members.items():
+    #     all_references.extend([member[OSM_REF_FIELD]
+    #                           for member in section_members])
 
-    # get list of references on Master wks
-    wks = spread.worksheet(YP_WKS)
-    headings = wks.row_values(HEADER_ROW)
-    gs_references = wks.col_values(
-        1 + headings.index(MAPPING[OSM_REF_FIELD]))[1 + TOP_OFFSET:]
+    # # get list of references on Master wks
+    # wks = spread.worksheet(YP_WKS)
+    # headings = wks.row_values(HEADER_ROW)
+    # gs_references = wks.col_values(
+    #     1 + headings.index(MAPPING[OSM_REF_FIELD]))[1 + TOP_OFFSET:]
 
-    # remove references that appear on Master wks but not in any
-    # section
-    delete_members(spread,
-                   [reference for reference in gs_references
-                    if (reference not in all_references) and reference != None])
+    # # remove references that appear on Master wks but not in any
+    # # section
+    # delete_members(spread,
+    #                [reference for reference in gs_references
+    #                 if (reference not in all_references) and reference != None])
+
+    process_finance_spreadsheet(gc, all_yp_members)
 
 if __name__ == '__main__':
 
