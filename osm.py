@@ -88,6 +88,9 @@ class OSMObject(collections.MutableMapping):
     def __iter__(self):
         return self._record.__iter__()
 
+    def __str__(self):
+        return pprint.pformat(self._record)
+
 
 class Accessor(object):
     __cache__ = {}
@@ -299,8 +302,15 @@ class Member(OSMObject):
         for k, v in list(self._column_map.items()):
             self._column_map[k] = v.replace(' ', '')
 
-        self._reverse_column_map = dict((reversed(list(i)) for i in list(column_map.items())))
+        self._reverse_column_map = dict((reversed(list(i)) for
+                                         i in list(column_map.items())))
         self._changed_keys = []
+
+    def __str__(self):
+        return "Member: \n Section = {!r}\n column_map = {!r} \n" \
+            "reverse_column_map = {!r} \n record = {}".format(
+                self._section, self._column_map,
+                self._reverse_column_map, OSMObject.__str__(self))
 
     def __getattr__(self, key):
         try:
@@ -310,10 +320,12 @@ class Member(OSMObject):
             try:
                 return self._record[self._reverse_column_map[key]]
             except:
-                raise KeyError("{!r} object has no attribute {!r}: primary keys {!r}, reverse keys: {!r}".format(
-                  type(self).__name__, key,
-                  self._record.keys(),
-                  self._reverse_column_map.keys()))
+                raise KeyError("{!r} object has no attribute {!r}: "
+                               "primary keys {!r}, "
+                               "reverse keys: {!r}".format(
+                                   type(self).__name__, key,
+                                   self._record.keys(),
+                                   self._reverse_column_map.keys()))
 
     def __getitem__(self, key):
         try:
@@ -322,12 +334,12 @@ class Member(OSMObject):
             try:
                 return self._record[self._reverse_column_map[key]]
             except:
-                raise KeyError("{!r} object has no attribute {!r}: primary keys {!r}, reverse keys: {!r}".format(
-                  type(self).__name__, key,
-                  self._record.keys(),
-                  self._reverse_column_map.keys()))
-                
-        
+                raise KeyError("{!r} object has no attribute {!r}:"
+                               "primary keys {!r}, reverse keys: {!r}".format(
+                                   type(self).__name__, key,
+                                   self._record.keys(),
+                                   self._reverse_column_map.keys()))
+         
     def __setitem__(self, key, value):
         try:
             self._record[key] = value
@@ -340,13 +352,16 @@ class Member(OSMObject):
                     self._changed_keys.append(self._reverse_column_map[key])
  
             except:
-                raise KeyError("{!r} object has no attribute {!r}: primary keys {!r}, reverse keys: {!r}".format(
-                  type(self).__name__, key,
-                  self._record.keys(),
-                  self._reverse_column_map.keys()))
+                raise KeyError("{!r} object has no attribute {!r}:"
+                               "primary keys {!r}, reverse keys: {!r}".format(
+                                   type(self).__name__, key,
+                                   self._record.keys(),
+                                   self._reverse_column_map.keys()))
 
-            raise KeyError("{!r} object has no attribute {!r}: avaliable keys: {!r}".format(
-              (type(self).__name__, key, self._record.keys())))
+            raise KeyError("{!r} object has no attribute {!r}: "
+                           "avaliable keys: {!r}".format(
+                               (type(self).__name__, key, 
+                                self._record.keys())))
 
     # def remove(self, last_date):
     #     """Remove the member record."""
@@ -555,7 +570,7 @@ class Section(OSMObject):
 
 
 class OSM(object):
-    def __init__(self, authorisor, sectionid_list = False):
+    def __init__(self, authorisor, sectionid_list=False):
         self._accessor = Accessor(authorisor)
 
         self.sections = {}
@@ -563,7 +578,7 @@ class OSM(object):
 
         self.init(sectionid_list)
 
-    def init(self, sectionid_list = False):
+    def init(self, sectionid_list=False):
         roles = self._accessor('api.php?action=getUserRoles')
 
         self.sections = {}
@@ -571,27 +586,26 @@ class OSM(object):
         for section in [Section(self, self._accessor, role, init=False)
                         for role in roles
                         if 'section' in role]:
-          if sectionid_list == False or \
-             section['sectionid'] in sectionid_list:
-            section.init()
-            self.sections[section['sectionid']] = section
+            if sectionid_list is False or \
+               section['sectionid'] in sectionid_list:
+                section.init()
+                self.sections[section['sectionid']] = section
             
-            if section['isDefault'] == '1':
-                self.section = section
+                if section['isDefault'] == '1':
+                    self.section = section
+                    log.info("Default section = {0}, term = {1}".format(
+                        self.section['sectionname'],
+                        self.section.term['name']))
 
-        if self.section == None:
-          self.section = self.sections[-1]
-
-        log.info("Default section = {0}, term = {1}".format(
-            self.section['sectionname'],
-            self.section.term['name']))
+        if self.section is None:
+            self.section = self.sections[-1]
 
     def terms(self, sectionid):
-      terms = self._accessor('api.php?action=getTerms')
-      if sectionid in terms:
-        return [Term(self, self._accessor, term) for term \
-                in terms[sectionid]]
-      return []
+        terms = self._accessor('api.php?action=getTerms')
+        if sectionid in terms:
+            return [Term(self, self._accessor, term) for term
+                    in terms[sectionid]]
+        return []
 
 
 if __name__ == '__main__':
