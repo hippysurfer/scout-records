@@ -2,14 +2,15 @@
 """Online Scout Manager Interface.
 
 Usage:
-  update.py <apiid> <token>
-  update.py <apiid> <token> -a <email> <password>
+  update.py [-d] <apiid> <token> 
+  update.py [-d] <apiid> <token> -a <email> <password>
   update.py (-h | --help)
   update.py --version
 
 
 Options:
-  -h --help      Show this screen.
+  -d,--debug     Turn on debug output.
+  -h,--help      Show this screen.
   --version      Show version.
   -a             Request authorisation credentials.
 
@@ -325,14 +326,18 @@ def process_finance_spreadsheet(gc, all_yp):
     for name, section_members in all_yp.items():
         for member in section_members:
             if member[OSM_REF_FIELD] not in fin_references:
+                member['SeniorSection'] = name
                 new_members.append(member)
 
     log.info("New members")
+    headings = ['patrol', 'SeniorSection', 'PersonalReference', 'firstname', 'lastname',
+                'PersonalEmail', 'DadEmail', 'MumEmail',
+                'dob', 'joined', 'started']
     with open("new.csv", 'w') as f:
-        f.write("\t".join(list(MAPPING.keys())))
+        f.write("\t".join(headings))
         f.write("\n")
         for member in new_members:
-            for k in MAPPING.keys():
+            for k in headings:
                 f.write(str(member[k])+'\t')
             f.write("\n")
 
@@ -393,6 +398,7 @@ def _main(osm, gc):
     def all_members(section_id):
         return sections.sections[section_id].members.values()
 
+    log.info("Processing adults...")
     # Process Adults ##################
     adult_members = all_members(SECTIONIDS['Adult'])
 
@@ -408,6 +414,7 @@ def _main(osm, gc):
     gs_references = wks.col_values(
         1 + headings.index(ADULT_MAPPING[OSM_REF_FIELD]))[TOP_OFFSET + 1:]
 
+    log.info("Deleting old leaders...")
     # remove references that appear on Leaders wks but not in any
     # section
     delete_members(spread,
@@ -416,6 +423,7 @@ def _main(osm, gc):
                    wks=ADULT_WKS)
 
     # Process YP Sections #################
+    log.info("Processing YP...")
 
     # read in all of the personal details from each of the OSM sections
     all_members = {'Paget': all_members(SECTIONIDS['Paget']),
@@ -429,8 +437,10 @@ def _main(osm, gc):
     all_leaders = []
     for section in all_members.keys():
         all_leaders.extend([member for member in all_members[section]
-                            if member['patrol'] == 'Leaders'])
+                            if member['patrol'].lower() in
+                            ['leaders', 'young leaders']])
 
+    log.info("Check adults in YP sections...")
     # check that all leaders are copied into the Adult section.
     for leader in all_leaders:
         if leader[OSM_REF_FIELD] not in osm_references:
@@ -444,7 +454,8 @@ def _main(osm, gc):
     all_yp_members = {}
     for section in all_members.keys():
         all_yp_members[section] = [member for member in all_members[section]
-                                   if not member['patrol'] == 'Leaders']
+                                   if not member['patrol'].lower() in
+                                   ['leaders', 'young leaders']]
 
     beaver_members = all_yp_members['Paget'] + all_yp_members['Brown']
     cub_members = all_yp_members['Rowallan'] + all_yp_members['Maclean']
@@ -467,6 +478,9 @@ def _main(osm, gc):
                 # check whether all of the field are the same.
                 for senior_member in matching_senior_members:
                     for field in MAPPING.keys():
+                        if field == 'joined':
+                            # We expect the joined field to be different.
+                            continue
                         if member[field] != senior_member[field]:
                             log.warn('{} section: {} senior record field mismatch ({}) "{}" != "{}"'.format(
                                 section, member[OSM_REF_FIELD],
@@ -475,6 +489,7 @@ def _main(osm, gc):
                 kept_members.append(member)
         return kept_members
 
+    log.info("Remove duplicate records at that are in senior sections ...")
     for beaver_section in ['Paget', 'Brown']:
         all_yp_members[beaver_section] = remove_senior_duplicates(
             beaver_section, cub_members)
@@ -485,8 +500,10 @@ def _main(osm, gc):
 
     # # Process the remaining members
     # for name, section_members in all_yp_members.items():
+    #     log.info("Processing section {}".format(name))
     #     process_section(name, section_members, spread, MAPPING)
 
+    log.info("Removing old members...")
     # # remove deleted members
     # # get list of all references from sections
     # all_references = []
@@ -506,19 +523,25 @@ def _main(osm, gc):
     #                [reference for reference in gs_references
     #                 if (reference not in all_references) and reference != None])
 
+    log.info("Processing finance spreadsheet...")
     process_finance_spreadsheet(gc, all_yp_members)
 
 if __name__ == '__main__':
 
-    logging.basicConfig(level=logging.INFO)
+    args = docopt(__doc__, version='OSM 2.0')
+
+    if args['--debug']:
+        level = logging.DEBUG
+    else:
+        level = logging.INFO
+
+    logging.basicConfig(level=level)
     log.debug("Debug On\n")
 
     try:
         osm.Accessor.__cache_load__(open(DEF_CACHE, 'rb'))
     except:
         log.warn("Failed to load cache file\n")
-
-    args = docopt(__doc__, version='OSM 2.0')
 
     if args['-a']:
         auth = osm.Authorisor(args['<apiid>'], args['<token>'])
