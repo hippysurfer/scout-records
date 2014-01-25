@@ -2,7 +2,7 @@
 """Online Scout Manager Interface.
 
 Usage:
-  update.py [-d] <apiid> <token> 
+  update.py [-d] <apiid> <token>
   update.py [-d] <apiid> <token> -a <email> <password>
   update.py (-h | --help)
   update.py --version
@@ -27,6 +27,8 @@ import pprint
 import gspread
 import creds
 
+from group import Group, OSM_REF_FIELD
+
 log = logging.getLogger(__name__)
 
 DEF_CACHE = "osm.cache"
@@ -35,14 +37,6 @@ DEF_CREDS = "osm.creds"
 MEMBER_SPREADSHEET_NAME = "TestSpread"
 FINANCE_SPREADSHEET_NAME = "Copy of Simplified Membership Master List (Apr 2013 - Mar 2014)"
 
-SECTIONIDS = {'Adult': '18305',
-              'Paget': '9960',
-              'Brown': '17326',
-              'Maclean': '14324',
-              'Rowallan': '12700',
-              'Boswell': '10363',
-              'Johnson': '5882'}
-              #'Waiting List': ""}
 
 ADULT_MAPPING = {'firstname': 'Firstname',
                  'lastname': 'Lastname',
@@ -116,7 +110,6 @@ ADULT_WKS = 'Leaders'
 
 DETAIL_WKS = "Sections In Detail"
 
-OSM_REF_FIELD = 'PersonalReference'
 
 GS_SOURCE_FIELD = 'Source'  # Field used to hold the source of a record.
 # Field used to hold the date of the last update.
@@ -136,23 +129,23 @@ def format_date(field):
     return new_field
 
 
-def find_ref_in_sections(reference, section_list):
-    """Return a list of the section names for each section that
-    contains reference.
+# def find_ref_in_sections(reference, section_list):
+#     """Return a list of the section names for each section that
+#     contains reference.
 
-    Call with a reference to search for and a list of (section_name,
-    section) pairs."""
+#     Call with a reference to search for and a list of (section_name,
+#     section) pairs."""
 
-    if len(section_list) == 0:
-        return []
-    section = section_list[0]
-    section_name = section[0]
-    references = [member[OSM_REF_FIELD] for member in section[1]]
-    if reference in references:
-        return [section_name] + find_ref_in_sections(
-            reference, section_list[1:])
-    else:
-        return find_ref_in_sections(reference, section_list[1:])
+#     if len(section_list) == 0:
+#         return []
+#     section = section_list[0]
+#     section_name = section[0]
+#     references = [member[OSM_REF_FIELD] for member in section[1]]
+#     if reference in references:
+#         return [section_name] + find_ref_in_sections(
+#             reference, section_list[1:])
+#     else:
+#         return find_ref_in_sections(reference, section_list[1:])
 
 
 def process_section(name, section_members, spread, mapping, target_wks=YP_WKS):
@@ -190,11 +183,13 @@ def process_section(name, section_members, spread, mapping, target_wks=YP_WKS):
             # osm_value = None # gs returns None for '' so this make the
             # comparison work.
             if format_date(gs_value) != format_date(osm_value):
-                log.info("Updating (from {}) - [{}, {}, {}] gs value ({!r})[{}] != osm value ({!r}) setting to ({})  gs: {!r}\n".format(
-                    name, reference, osm_field, gs_field,
-                    format_date(gs_value), headings.index(gs_field),
-                    format_date(osm_value), format_date(osm_value),
-                    osm_values[references.index(reference)]))
+                log.info("Updating (from {}) - [{}, {}, {}]"
+                         "gs value ({!r})[{}] != osm value "
+                         "({!r}) setting to ({})  gs: {!r}\n".format(
+                             name, reference, osm_field, gs_field,
+                             format_date(gs_value), headings.index(gs_field),
+                             format_date(osm_value), format_date(osm_value),
+                             osm_values[references.index(reference)]))
                 wks.update_cell(
                     2 + TOP_OFFSET +
                     references.index(reference), 1 +
@@ -226,7 +221,6 @@ def process_section(name, section_members, spread, mapping, target_wks=YP_WKS):
 
     new_members = [
         member for member in members if member not in updated_members]
-    #deleted_references = [ ref for ref in references if (ref not in updated_references) and ref != None ]
 
     # new_members now contains only new records and
     # deleted_references contains only deleted records
@@ -238,15 +232,16 @@ def process_section(name, section_members, spread, mapping, target_wks=YP_WKS):
         empty_row = False
         for row in range(1, wks.row_count + 1):
             is_empty = (
-                len([cell for cell in wks.row_values(row) if cell != None]) == 0)
-            if is_empty and empty_row == False:
+                len([cell for cell in wks.row_values(row)
+                     if cell is not None]) == 0)
+            if is_empty and empty_row is False:
                 empty_row = row
-            elif not is_empty and empty_row != False:
+            elif not is_empty and empty_row is not False:
                 empty_row = False
 
         # If there are not enough spare row in spreadsheet add extra rows
         start_row = empty_row
-        if empty_row == False:
+        if empty_row is False:
             start_row = wks.row_count + 1
             wks.add_rows(len(members))
         elif (wks.row_count - empty_row) < len(new_members):
@@ -306,7 +301,8 @@ def delete_members(spread, references, wks=YP_WKS):
         move_row(reference, wks, del_wks)
 
 
-def process_finance_spreadsheet(gc, all_yp):
+def process_finance_spreadsheet(gc, group):
+    log.info("Processing finance spreadsheet...")
 
     fin = gc.open(FINANCE_SPREADSHEET_NAME)
 
@@ -321,6 +317,8 @@ def process_finance_spreadsheet(gc, all_yp):
     # TODO: Parameterise the selection of the current quarter.
     q4_section = wks.col_values(
         1 + headings.index('Q4 Sec'))[FIN_HEADER_ROW:]
+
+    all_yp = group.all_yp_members_without_senior_duplicates_dict()
 
     # create a map from refs to members for later lookup
     all_members = {}
@@ -338,7 +336,8 @@ def process_finance_spreadsheet(gc, all_yp):
                 new_members.append(member)
 
     log.info("New members")
-    headings = ['patrol', 'SeniorSection', 'PersonalReference', 'firstname', 'lastname',
+    headings = ['patrol', 'SeniorSection', 'PersonalReference',
+                'firstname', 'lastname',
                 'PersonalEmail', 'DadEmail', 'MumEmail',
                 'dob', 'joined', 'started']
     with open("new.csv", 'w') as f:
@@ -348,7 +347,6 @@ def process_finance_spreadsheet(gc, all_yp):
             for k in headings:
                 f.write(str(member[k])+'\t')
             f.write("\n")
-
 
     # Create a list of all YP that are on the finance list but are not
     # in OSM.
@@ -363,7 +361,7 @@ def process_finance_spreadsheet(gc, all_yp):
             missing_references.append(ref)
 
     log.info("Old members")
-    open("missing.csv", 'w').writelines([ l+'\n' for l in missing_references ])
+    open("missing.csv", 'w').writelines([l+'\n' for l in missing_references])
 
     # Create a list of all YP who are on the finanace list but are not
     # in the same section in OSM.
@@ -396,37 +394,27 @@ def process_finance_spreadsheet(gc, all_yp):
                 all_members[member[0][OSM_REF_FIELD]]['lastname']]))
             f.write("\n")
 
-def _main(osm, gc):
-    spread = gc.open(MEMBER_SPREADSHEET_NAME)
 
-    sections = osm.OSM(auth, SECTIONIDS.values())
-
-    #test_section = '15797'
-
-    def all_members(section_id):
-        return sections.sections[section_id].members.values()
+def process_adults(group, spread):
 
     log.info("Processing adults...")
     # Process Adults ##################
-    adult_members = all_members(SECTIONIDS['Adult'])
+    adult_members = group.all_adult_members()
 
     process_section('Adult', adult_members, spread,
                     ADULT_MAPPING, target_wks=ADULT_WKS)
 
     # Warn about missing references
-    missing_refs = [member for member in adult_members
-                    if member[OSM_REF_FIELD].strip() == ""]
-    missing_ref_names = []
-    for member in missing_refs:
-        missing_ref_names.append("{} {}".format(member['firstname'],
-                                                member['lastname']))
+    missing_ref_names = ["{} {}".format(member['firstname'],
+                                        member['lastname'])
+                         for member in group.missing_adult_references()]
 
-    if len(missing_ref_names) > 0:
+    if missing_ref_names:
         log.warn("The following adults do not have references: \n {}".format(
             "\n\t".join(missing_ref_names)))
 
     # Get list of all reference is OSM
-    osm_references = [member[OSM_REF_FIELD] for member in adult_members]
+    adult_osm_references = group.all_adult_references()
 
     # get list of references on Leader wks
     wks = spread.worksheet(ADULT_WKS)
@@ -439,105 +427,47 @@ def _main(osm, gc):
     # section
     delete_members(spread,
                    [reference for reference in gs_references
-                    if (reference not in osm_references) and reference != None],
+                    if (reference not in adult_osm_references) and
+                    reference is not None],
                    wks=ADULT_WKS)
 
+
+def process_yp(group, spread):
     # Process YP Sections #################
     log.info("Processing YP...")
 
-    # read in all of the personal details from each of the OSM sections
-    all_members = {'Paget': all_members(SECTIONIDS['Paget']),
-                   'Brown': all_members(SECTIONIDS['Brown']),
-                   'Maclean': all_members(SECTIONIDS['Maclean']),
-                   'Rowallan': all_members(SECTIONIDS['Rowallan']),
-                   'Boswell': all_members(SECTIONIDS['Boswell']),
-                   'Johnson': all_members(SECTIONIDS['Johnson'])}
-
     # Warn about missing references
-    for section in all_members.keys():
+    for section in group.YP_SECTIONS:
+        # Warn about missing references
+        missing_ref_names = ["{} {}".format(member['firstname'],
+                                            member['lastname'])
+                             for member in
+                             group.section_missing_references(section)]
 
-        missing_refs = [member for member in all_members[section]
-                        if member[OSM_REF_FIELD].strip() == ""]
-        missing_ref_names = []
-        for member in missing_refs:
-            missing_ref_names.append("{} {}".format(member['firstname'],
-                                                    member['lastname']))
-
-        if len(missing_ref_names) > 0:
+        if missing_ref_names:
             log.warn("The following members in {} "
                      "do not have references: \n {}".format(
                          section,
                          "\n\t".join(missing_ref_names)))
 
-    # Make a list of all the leaders
-    all_leaders = []
-    for section in all_members.keys():
-        all_leaders.extend([member for member in all_members[section]
-                            if member['patrol'].lower() in
-                            ['leaders', 'young leaders']])
+    all_yp_section_leaders = group.all_leaders_in_yp_sections()
 
     log.info("Check adults in YP sections...")
     # check that all leaders are copied into the Adult section.
-    for leader in all_leaders:
-        if leader[OSM_REF_FIELD] not in osm_references:
-            log.warn("Leader {} is in {!r} section but not in the Adult section.".format(
-                leader[OSM_REF_FIELD],
-                find_ref_in_sections(
-                    leader[OSM_REF_FIELD],
-                    [(key, value) for (key, value) in all_members.items()] + [('Adult', adult_members)])))
+    for leader in all_yp_section_leaders:
+        if leader[OSM_REF_FIELD] not in group.all_adult_references():
+            log.warn("Leader {} is in {!r} section "
+                     "but not in the Adult section.".format(
+                         leader[OSM_REF_FIELD],
+                         group.find_ref_in_sections(
+                             leader[OSM_REF_FIELD])))
 
     # make lists of sections with the Leaders removed
-    all_yp_members = {}
-    for section in all_members.keys():
-        all_yp_members[section] = [member for member in all_members[section]
-                                   if not member['patrol'].lower() in
-                                   ['leaders', 'young leaders']]
-
-    beaver_members = all_yp_members['Paget'] + all_yp_members['Brown']
-    cub_members = all_yp_members['Rowallan'] + all_yp_members['Maclean']
-    scout_members = all_yp_members['Johnson'] + all_yp_members['Boswell']
-
     # TODO: Search for multiple references to the same Family Reference
     #             warn if the details are not the same
-    # For each section we need to look at whether a member appears in a
-    # senior section too (they will if they are in the process of
-    # moving). If they are in a senior section we want to favour the
-    # senior records (but warn if it is different).
-    def remove_senior_duplicates(section, senior_members):
-        kept_members = []
-        for member in all_yp_members[section]:
-            matching_senior_members = [senior_member for senior_member in senior_members
-                                       if senior_member[OSM_REF_FIELD] == member[OSM_REF_FIELD]]
-            if len(matching_senior_members) > 0:
-                log.info("{} section: {} is in senior section - "
-                         "favouring senior record".format(
-                             section, member[OSM_REF_FIELD]))
-                # check whether all of the field are the same.
-                for senior_member in matching_senior_members:
-                    for field in MAPPING.keys():
-                        if field == 'joined':
-                            # We expect the joined field to be different.
-                            continue
-                        if member[field] != senior_member[field]:
-                            log.warn('{} section: {} senior record'
-                                     'field mismatch ({}) "{}" != "{}"'
-                                     '\n {}\n\n'.format(
-                                         section, member[OSM_REF_FIELD],
-                                         field, member[field],
-                                         senior_member[field],
-                                         str(member)))
-            else:
-                kept_members.append(member)
-        return kept_members
 
     log.info("Remove duplicate records at that are in senior sections ...")
-    for beaver_section in ['Paget', 'Brown']:
-        all_yp_members[beaver_section] = remove_senior_duplicates(
-            beaver_section, cub_members)
-
-    for cub_section in ['Maclean', 'Rowallan']:
-        all_yp_members[cub_section] = remove_senior_duplicates(
-            cub_section, scout_members)
+    all_yp_members = group.all_yp_members_without_senior_duplicates_dict()
 
     # Process the remaining members
     for name, section_members in all_yp_members.items():
@@ -562,10 +492,23 @@ def _main(osm, gc):
     # section
     delete_members(spread,
                    [reference for reference in gs_references
-                    if (reference not in all_references) and reference != None])
+                    if (reference not in all_references) and
+                    reference is not None])
 
-    log.info("Processing finance spreadsheet...")
-    process_finance_spreadsheet(gc, all_yp_members)
+
+def _main(osm, gc, auth):
+    #test_section = '15797'
+
+    spread = gc.open(MEMBER_SPREADSHEET_NAME)
+
+    group = Group(osm, auth, MAPPING.keys())
+
+    process_adults(group, spread)
+
+    process_yp(group, spread)
+
+    process_finance_spreadsheet(gc, group)
+
 
 if __name__ == '__main__':
 
@@ -602,4 +545,4 @@ if __name__ == '__main__':
     #    _main(osm, gc)
     #finally:
     #    osm.Accessor.__cache_save__(open(DEF_CACHE, 'wb'))
-    _main(osm, gc)
+    _main(osm, gc, auth)
