@@ -31,11 +31,11 @@ class Group(object):
         self._important_fields = important_fields
         self._sections = self._osm.OSM(auth, self.SECTIONIDS.values())
 
-    def _section_all_members(self, section):
+    def section_all_members(self, section):
         return self._sections.sections[self.SECTIONIDS[section]].members.values()
 
     def all_adult_members(self):
-        return self._section_all_members('Adult')
+        return self.section_all_members('Adult')
 
     def all_adult_references(self):
         return [member[OSM_REF_FIELD] for member in self.all_adult_members()]
@@ -43,18 +43,18 @@ class Group(object):
     def all_section_references(self, section):
         return [member[OSM_REF_FIELD]
                 for member in
-                self._section_all_members(section)]
+                self.section_all_members(section)]
 
     def _section_missing_references(self, section):
         return [member for member in
-                self._section_all_members(section)
+                self.section_all_members(section)
                 if member[OSM_REF_FIELD].strip() == ""]
 
     def missing_adult_references(self):
         return self._section_missing_references('Adult')
 
     def all_yp_members_dict(self):
-        return {s: self._section_all_members(s) for
+        return {s: self.section_all_members(s) for
                 s in self.YP_SECTIONS}
 
     def all_yp_members_without_senior_duplicates_dict(self):
@@ -69,7 +69,7 @@ class Group(object):
                 'Boswell': self._section_yp_members_without_leaders('Boswell'),
                 'Johnson': self._section_yp_members_without_leaders('Johnson')}
 
-        return {s: self._section_all_members(s) for
+        return {s: self.section_all_members(s) for
                 s in self.YP_SECTIONS}
     
     def section_missing_references(self, section_name):
@@ -77,13 +77,13 @@ class Group(object):
 
     def _section_yp_members_without_leaders(self, section):
         return [member for member in
-                self._section_all_members(section)
+                self.section_all_members(section)
                 if not member['patrol'].lower() in
                 ['leaders', 'young leaders']]
 
     def _section_leaders_in_yp_section(self, section):
         return [member for member in
-                self._section_all_members(
+                self.section_all_members(
                     section)
                 if member['patrol'].lower() in
                 ['leaders', 'young leaders']]
