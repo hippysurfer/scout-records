@@ -35,7 +35,7 @@ DEF_CACHE = "osm.cache"
 DEF_CREDS = "osm.creds"
 
 MEMBER_SPREADSHEET_NAME = "TestSpread"
-FINANCE_SPREADSHEET_NAME = "Copy of Simplified Membership Master List (Apr 2013 - Mar 2014)"
+FINANCE_SPREADSHEET_NAME = "Simplified Membership Master List"
 
 
 ADULT_MAPPING = {'firstname': 'Firstname',
