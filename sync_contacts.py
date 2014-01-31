@@ -20,6 +20,7 @@ Options:
 import os.path
 import logging
 from docopt import docopt
+import socket
 
 log = logging.getLogger(__name__)
 
@@ -28,59 +29,78 @@ from carddav_util.carddav import PyCardDAV
 import vobject
 import uuid
 
+ACCOUNTS = {'Brown': ('brown', 'brown.beavers'),
+            'Paget': ('paget', 'paget.beavers'),
+            'Rowallan': ('rowallan', 'rowallan.cubs'),
+            'Maclean': ('maclean', 'maclean.cubs'),
+            'Boswell': ('boswell', 'boswell.scouts'),
+            'Johnson': ('johnson', 'johnson.scouts'),
+            'Adults': ('adults', 'adults.group')}
+
 
 def _main(sections, vcard_dir):
-
     assert os.path.exists(vcard_dir) and os.path.isdir(vcard_dir)
+
+    if isinstance(sections, str):
+        sections = [sections, ]
 
     for section in sections:
         assert section in Group.SECTIONIDS.keys(), \
             "section must be in {!r}.".format(Group.SECTIONIDS.keys())
 
-    vcard_file = "{}.vcf".format(section)
-    user = 'rjt'
-    passwd = 'hvf705v1'
-    url = 'https://www.thegrindstone.me.uk/owncloud/'\
-          'remote.php/carddav/addressbooks/{}/contacts/'.format(user)
+    for section in sections:
+        vcard_file = "{}.vcf".format(section)
+        user, passwd = ACCOUNTS[section]
 
-    dav = PyCardDAV(url, user=user, passwd=passwd,
-                    write_support=True, auth='basic',
-                    verify=False)
+        hostname = 'www.thegrindstone.me.uk' \
+                   if not socket.gethostname() == 'rat' \
+                   else 'localhost'
 
-    abook = dav.get_abook()
-    nCards = len(abook.keys())
-    
-    # for each card, delete the card
-    curr = 1
-    for href, etag in list(abook.items()):
-        log.info("Deleting {} of {}.".format(curr, nCards))
-        curr += 1
-        card = dav.delete_vcard(href, etag)
+        url = 'https://{}/owncloud/'\
+              'remote.php/carddav/addressbooks/{}/contacts/'.format(hostname,
+                                                                    user)
 
-    # now read in the new cards and upload.
-    with open(os.path.join(vcard_dir, vcard_file), 'r') as f:
-        cards = []
-        for card in vobject.readComponents(f, validate=True):
-            cards.append(card)
-        nCards = len(cards)
+        log.debug('Connecting to: {}'.format(url))
+        dav = PyCardDAV(url, user=user, passwd=passwd,
+                        write_support=True, auth='basic',
+                        verify=False)
 
-        log.info("Uploading {} cards.".format(nCards))
+        abook = dav.get_abook()
+        nCards = len(abook.keys())
 
+        # for each card, delete the card
         curr = 1
-        for card in cards:
-            log.info("Uploading {} of {}.".format(curr, nCards))
+        for href, etag in list(abook.items()):
+            log.info("Deleting {} of {}.".format(curr, nCards))
+            curr += 1
+            card = dav.delete_vcard(href, etag)
 
-            if hasattr(card, 'prodid'):
-                del card.prodid
+        # now read in the new cards and upload.
+        with open(os.path.join(vcard_dir, vcard_file), 'r') as f:
+            cards = []
+            for card in vobject.readComponents(f, validate=True):
+                cards.append(card)
+            nCards = len(cards)
 
-            if not hasattr(card, 'uid'):
-                card.add('uid')
-            card.uid.value = str(uuid.uuid4())
+            log.info("Uploading {} cards.".format(nCards))
 
-            log.debug(type(card.serialize()))
-            log.debug(card.serialize())
-            
-            dav.upload_new_card(card.serialize())
+            curr = 1
+            for card in cards:
+                log.info("Uploading {} of {}.".format(curr, nCards))
+
+                if hasattr(card, 'prodid'):
+                    del card.prodid
+
+                if not hasattr(card, 'uid'):
+                    card.add('uid')
+                card.uid.value = str(uuid.uuid4())
+
+                log.debug(type(card.serialize()))
+                log.debug(card.serialize())
+
+                dav.upload_new_card(card.serialize())
+
+                curr += 1
 
 
 if __name__ == '__main__':
