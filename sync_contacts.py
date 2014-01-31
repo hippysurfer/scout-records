@@ -71,7 +71,7 @@ def _main(sections, vcard_dir):
         # for each card, delete the card
         curr = 1
         for href, etag in list(abook.items()):
-            log.info("Deleting {} of {}.".format(curr, nCards))
+            log.debug("Deleting {} of {}.".format(curr, nCards))
             curr += 1
             card = dav.delete_vcard(href, etag)
 
@@ -86,7 +86,7 @@ def _main(sections, vcard_dir):
 
             curr = 1
             for card in cards:
-                log.info("Uploading {} of {}.".format(curr, nCards))
+                log.debug("Uploading {} of {}.".format(curr, nCards))
 
                 if hasattr(card, 'prodid'):
                     del card.prodid
