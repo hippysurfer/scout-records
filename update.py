@@ -198,9 +198,9 @@ def process_section(name, section_members, spread, mapping, target_wks=YP_WKS):
                 updated = True
 
         if updated:
-            log.info("Updated member information OSM record = \n {}".format(
+            log.debug("Updated member information OSM record = \n {}".format(
                 str(member)))
-            log.info("Updated member information GS record = \n {}".format(
+            log.debug("Updated member information GS record = \n {}".format(
                 pprint.pformat(
                     osm_values[references.index(reference)])))
 
