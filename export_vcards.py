@@ -40,10 +40,11 @@ def parse_tel(number_field, default_name):
             index = i
             break
 
-    number = number_field[:index].strip()
+    number = number_field[:index].strip() if index != 0 else number_field
     name = number_field[index:].strip() if index != 0 else default_name
 
-    #print("{} {} {} {}".format(number_field, index, number, name))
+    #print("input = {}, index = {}, number = {}, name = {}".format(
+    #    number_field, index, number, name))
 
     return number, name
 
@@ -115,6 +116,13 @@ def member2vcard(member, section):
     addr = j.add('adr', 'item8')
     addr.value = vo.vcard.Address(
         street=member['SecondaryAddress' if section != 'Adult' else 'NOKAddress'])
+
+    number, name = parse_tel(member['HomeTel'],
+                             'Home')
+    item9 = j.add('X-ABLabel', 'item9')
+    item9.value = name
+    htel = j.add('tel', 'item9')
+    htel.value = number
 
     bday = j.add('bday')
     bday.value = datetime.datetime.strptime(
