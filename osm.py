@@ -468,13 +468,13 @@ class Members(OSMObject):
 
         members = {}
         for member in record['items']:
-            members[member[self._identifier]] = Member(osm, section, accessor, column_map, member)
+            members[member[self._identifier]] = MemberClass(osm, section, accessor, column_map, member)
 
         OSMObject.__init__(self, osm, accessor, members)
 
     def new_member(self, firstname, lastname, dob, startedsection, started):
-        new_member = Member(self._osm, self._section,
-                            self._accessor,self._column_map,self.DEFAULT_DICT)
+        new_member = MemberClass(self._osm, self._section,
+                                 self._accessor,self._column_map,self.DEFAULT_DICT)
         new_member['firstname'] = firstname
         new_member['lastname'] = lastname
         new_member['dob'] = dob
@@ -607,6 +607,7 @@ class OSM(object):
                     in terms[sectionid]]
         return []
 
+MemberClass = Member
 
 if __name__ == '__main__':
 

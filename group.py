@@ -1,10 +1,20 @@
+from datetime import datetime
 import logging
+import osm
 
 log = logging.getLogger(__name__)
 
-
 OSM_REF_FIELD = 'PersonalReference'
 
+
+class Member(osm.Member):
+
+    def age(self, ref_date=datetime.now()):
+        dob = datetime.strptime(
+            self['dob'], '%d/%m/%Y')
+        return ref_date - dob
+
+osm.MemberClass = Member
 
 class Group(object):
     
@@ -66,8 +76,8 @@ class Group(object):
                                                          self.all_scouts()),
                 'Rowallan': self.remove_senior_duplicates('Rowallan',
                                                           self.all_scouts()),
-                'Boswell': self._section_yp_members_without_leaders('Boswell'),
-                'Johnson': self._section_yp_members_without_leaders('Johnson')}
+                'Boswell': self.section_yp_members_without_leaders('Boswell'),
+                'Johnson': self.section_yp_members_without_leaders('Johnson')}
 
         return {s: self.section_all_members(s) for
                 s in self.YP_SECTIONS}
@@ -75,13 +85,13 @@ class Group(object):
     def section_missing_references(self, section_name):
         return self._section_missing_references(section_name)
 
-    def _section_yp_members_without_leaders(self, section):
+    def section_yp_members_without_leaders(self, section):
         return [member for member in
                 self.section_all_members(section)
                 if not member['patrol'].lower() in
                 ['leaders', 'young leaders']]
 
-    def _section_leaders_in_yp_section(self, section):
+    def section_leaders_in_yp_section(self, section):
         return [member for member in
                 self.section_all_members(
                     section)
@@ -93,27 +103,27 @@ class Group(object):
         all_leaders = []
         for section in self.YP_SECTIONS:
             all_leaders.extend(
-                self._section_leaders_in_yp_section(section))
+                self.section_leaders_in_yp_section(section))
         return all_leaders
 
     def all_yp_members_without_leaders(self):
         all_yps = []
         for section in self.YP_SECTIONS:
             all_yps.extend(
-                self._section_yp_members_without_leaders(section))
+                self.section_yp_members_without_leaders(section))
         return all_yps
 
     def all_beavers(self):
-        return self._section_yp_members_without_leaders('Paget') +\
-            self._section_yp_members_without_leaders('Brown')
+        return self.section_yp_members_without_leaders('Paget') +\
+            self.section_yp_members_without_leaders('Brown')
 
     def all_cubs(self):
-        return self._section_yp_members_without_leaders('Rowallan') +\
-            self._section_yp_members_without_leaders('Maclean')
+        return self.section_yp_members_without_leaders('Rowallan') +\
+            self.section_yp_members_without_leaders('Maclean')
 
     def all_scouts(self):
-        return self._section_yp_members_without_leaders('Johnson') +\
-            self._section_yp_members_without_leaders('Boswell')
+        return self.section_yp_members_without_leaders('Johnson') +\
+            self.section_yp_members_without_leaders('Boswell')
         
     def find_ref_in_sections(self, reference):
         """Search for a reference in all of the sections.
@@ -135,7 +145,7 @@ class Group(object):
     # senior records (but warn if it is different).
     def remove_senior_duplicates(self, section, senior_members):
         kept_members = []
-        for member in self._section_yp_members_without_leaders(section):
+        for member in self.section_yp_members_without_leaders(section):
             matching_senior_members = [senior_member for senior_member
                                        in senior_members
                                        if senior_member[OSM_REF_FIELD] ==
@@ -161,3 +171,66 @@ class Group(object):
             else:
                 kept_members.append(member)
         return kept_members
+
+    def girls_in_section(self, section):
+        return [m for m in self.section_yp_members_without_leaders(section)
+                if m['Sex'].lower() == 'f' or m['Sex'].lower() == 'female']
+
+    def boys_in_section(self, section):
+        return [m for m in self.section_yp_members_without_leaders(section)
+                if m['Sex'].lower() == 'm' or m['Sex'].lower() == 'male']
+
+
+    def census(self):
+        """Return the information required for the anual census."""
+
+        r = {'Beavers': {'M':
+                         {5: 0, 6: 0, 7: 0, 8: 0},
+                         'F':
+                         {5: 0, 6: 0, 7: 0, 8: 0}},
+             'Cubs': {'M':
+                      {7: 0, 8: 0, 9: 0, 10: 0},
+                      'F':
+                      {7: 0, 8: 0, 9: 0, 10: 0}},
+             'Scouts': {'M':
+                        {10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0},
+                        'F':
+                        {10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0}}}
+
+        for i in range(5, 9):
+            r['Beavers']['F'][i] = len(
+                [m for m in
+                 self.girls_in_section('Brown') +
+                 self.girls_in_section('Paget')
+                 if int(m.age().days / 365) == i])
+            r['Beavers']['M'][i] = len(
+                [m for m in
+                 self.boys_in_section('Brown') +
+                 self.boys_in_section('Paget')
+                 if int(m.age().days / 365) == i])
+
+        for i in range(7, 11):
+            r['Cubs']['F'][i] = len(
+                [m for m in
+                 self.girls_in_section('Maclean') +
+                 self.girls_in_section('Rowallan')
+                 if int(m.age().days / 365) == i])
+            r['Cubs']['M'][i] = len(
+                [m for m in
+                 self.boys_in_section('Maclean') +
+                 self.boys_in_section('Rowallan')
+                 if int(m.age().days / 365) == i])
+
+        for i in range(10, 16):
+            r['Scouts']['F'][i] = len(
+                [m for m in
+                 self.girls_in_section('Johnson') +
+                 self.girls_in_section('Boswell')
+                 if int(m.age().days / 365) == i])
+            r['Scouts']['M'][i] = len(
+                [m for m in
+                 self.boys_in_section('Johnson') +
+                 self.boys_in_section('Boswell')
+                 if int(m.age().days / 365) == i])
+
+        return r
