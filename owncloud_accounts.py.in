@@ -1,0 +1,1 @@
+ACCOUNTS = {'section': ('username', 'password')}
