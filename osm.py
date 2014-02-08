@@ -27,6 +27,7 @@ import logging
 import datetime
 import pprint
 import collections
+from operator import attrgetter
 
 log = logging.getLogger(__name__)
 pp = pprint.PrettyPrinter(indent=4)
@@ -486,6 +487,49 @@ class Members(OSMObject):
         new_member['email1'] = ''
         return new_member
 
+
+class Event(OSMObject):
+
+    def __init__(self, osm, section, accessor, record):
+        OSMObject.__init__(self, osm, accessor, record)
+
+        self.meeting_date = datetime.datetime.strptime(
+            self._record['meetingdate'], '%Y-%m-%d')
+
+        h, m, s = (int(i) for i in self._record['starttime'].split(':'))
+        self.start_time = datetime.time(h, m, s)
+
+        h, m, s = (int(i) for i in self._record['endtime'].split(':'))
+        self.end_time = datetime.time(h, m, s)
+
+    def __str__(self):
+        return "{} - {} - {} - {} - {}".format(
+            self['title'], self['notesforparents'],
+            self['meetingdate'],
+            self['starttime'], self['endtime'])
+
+
+class Programme(OSMObject):
+    def __init__(self, osm, section, accessor, record):
+        self._osm = osm,
+        self._section = section
+        self._accessor = accessor
+
+        events = {}
+        for event in record['items']:
+            events["{} - {}".format(
+                event['title'],
+                event['meetingdate'])] = Event(osm, section, accessor, event)
+
+        OSMObject.__init__(self, osm, accessor, events)
+
+    def events_by_date(self):
+        """Return a list of events sorted by start date (and time)"""
+
+        return sorted(self._record.values(),
+                      key=attrgetter('meeting_date'))
+    
+
 class Section(OSMObject):
     def __init__(self, osm, accessor, record, init=True):
         OSMObject.__init__(self, osm, accessor, record)
@@ -503,35 +547,43 @@ class Section(OSMObject):
         self.terms = [term for term in self._osm.terms(self['sectionid'])
                       if term.is_active()]
 
-        # TODO - report error if terms has more than one entry.
         if len(self.terms) > 1:
-          log.warn("{!r}: More than 1 term is active, picking last in list {!r}".format(
-            self['sectionname'],
-            [ (term['name'],term['past']) for term in self.terms ]))
-          sys.exit(0)
+            log.warn("{!r}: More than 1 term is active, picking "
+                     "last in list {!r}".format(
+                         self['sectionname'],
+                         [(term['name'], term['past']) for
+                          term in self.terms]))
+            sys.exit(0)
 
         if len(self.terms) == 0:
-          # If there is no active term it does make sense to gather
-          # badge info.
-          self.term = None
-          self.challenge = None
-          self.activity = None
-          self.staged = None
-          self.core = None
+            # If there is no active term it does make sense to gather
+            # badge info.
+            self.term = None
+            self.challenge = None
+            self.activity = None
+            self.staged = None
+            self.core = None
         else:
-          self.term = self.terms[-1]
-          self.challenge = self._get_badges('challenge')
-          self.activity = self._get_badges('activity')
-          self.staged = self._get_badges('staged')
-          self.core = self._get_badges('core')
+            self.term = self.terms[-1]
+            self.challenge = self._get_badges('challenge')
+            self.activity = self._get_badges('activity')
+            self.staged = self._get_badges('staged')
+            self.core = self._get_badges('core')
         
         try:
-          self.members = self._get_members()
+            self.members = self._get_members()
         except:
-          log.warn("Failed to get members for section {0}".format(self['sectionname']))
-          self.members = []
-          
+            log.warn("Failed to get members for section {0}"
+                     .format(self['sectionname']))
+            self.members = []
 
+        try:
+            self.programme = self._get_programme()
+        except:
+            log.warn("Failed to get programme for section {0}"
+                     .format(self['sectionname']))
+            self.programme = []
+          
     def __repr__(self):
         return 'Section({0}, "{1}", "{2}")'.format(
             self['sectionid'],
@@ -567,6 +619,14 @@ class Section(OSMObject):
 
         return Members(self._osm, self, self._accessor,
                        self._member_column_map, self._accessor(url))
+
+    def _get_programme(self):
+        url = "programme.php?action=getProgrammeSummary"\
+              "&sectionid={0}&termid={1}".format(self['sectionid'],
+                                                 self.term['termid'])
+
+        return Programme(self._osm, self, self._accessor,
+                         self._accessor(url))
 
 
 class OSM(object):
