@@ -17,6 +17,16 @@
 #
 # Copyright (C) 2007 Andrea Righi <righiandr@users.sf.net>
 #
+# Drastic simplication to just delete all records from a calendar and
+# insert a new set of events from an ical file. Removed lots of code
+# and also made things work with the different configuration file
+# format. It also now supports non-default calendar in Google Calendar
+# as target.
+#
+# Reformated code to better conform to pep8.
+#
+# Copyright (C) 2014 Richard Taylor <rjt@thegrindstone.me.uk>
+#
 # Description:
 #  - synchronize a local iCal (.ics) file with Google Calendar.
 #
@@ -77,7 +87,6 @@ import atom
 #
 from google_accounts import ACCOUNTS
 
-# Google Calendar class.
 
 class GoogleCalendar:
 
@@ -199,8 +208,8 @@ class GoogleCalendar:
             event['organizer'] = \
                 self.encode_element(dt.organizer.params['CN'][0])
             event['mailto'] = self.encode_element(dt.organizer.value)
-            event['mailto'] = re.search('(?<=MAILTO:).+', event['mailto'
-                    ]).group(0)
+            event['mailto'] = re.search('(?<=MAILTO:).+',
+                                        event['mailto']).group(0)
         if hasattr(dt, 'rrule'):
             event['rrule'] = self.encode_element(dt.rrule.value)
         if hasattr(dt, 'dtstart'):
@@ -211,15 +220,14 @@ class GoogleCalendar:
             event['alarm'] = \
                 self.format_alarm(self.encode_element(dt.valarm.trigger.value))
 
-                # Convert into a Google Calendar event.
-
         try:
             e.title = atom.Title(text=event['subject'])
-            e.extended_property.append(gdata.calendar.ExtendedProperty(name='local_uid'
-                    , value=event['uid']))
+            e.extended_property.append(
+                gdata.calendar.ExtendedProperty(name='local_uid',
+                                                value=event['uid']))
             e.content = atom.Content(text=event['description'])
-            e.where.append(gdata.calendar.Where(value_string=event['where'
-                           ]))
+            e.where.append(gdata.calendar.Where(
+                value_string=event['where']))
             e.event_status = gdata.calendar.EventStatus()
             e.event_status.value = event['status']
             if event.has_key('organizer'):
@@ -235,12 +243,7 @@ class GoogleCalendar:
                 else:
                     e.who.append(attendee)
 
-                        # TODO: handle list of attendees.
-
             if event.has_key('rrule'):
-
-                                # Recurring event.
-
                 recurrence_data = ('DTSTART;VALUE=DATE:%s\r\n'
                                    + 'DTEND;VALUE=DATE:%s\r\n'
                                    + 'RRULE:%s\r\n') \
@@ -250,25 +253,23 @@ class GoogleCalendar:
                 e.recurrence = \
                     gdata.calendar.Recurrence(text=recurrence_data)
             else:
-
-                                # Single-occurrence event.
-
                 if len(e.when) > 0:
                     e.when[0] = \
-                        gdata.calendar.When(start_time=self.format_datetime(event['start']),
+                        gdata.calendar.When(
+                            start_time=self.format_datetime(event['start']),
                             end_time=self.format_datetime(event['end']))
                 else:
-                    e.when.append(gdata.calendar.When(start_time=self.format_datetime(event['start']),
-                                  end_time=self.format_datetime(event['end'])))
+                    e.when.append(gdata.calendar.When(
+                        start_time=self.format_datetime(event['start']),
+                        end_time=self.format_datetime(event['end'])))
                 if event.has_key('alarm'):
-
-                                        # Set reminder.
-
                     for a_when in e.when:
                         if len(a_when.reminder) > 0:
                             a_when.reminder[0].minutes = event['alarm']
                         else:
-                            a_when.reminder.append(gdata.calendar.Reminder(minutes=event['alarm']))
+                            a_when.reminder.append(
+                                gdata.calendar.Reminder(
+                                    minutes=event['alarm']))
         except Exception, e:
             print >> sys.stderr, \
                 'ERROR: couldn\'t create gdata event object: ', \
@@ -304,14 +305,15 @@ class GoogleCalendar:
             if not found:
                 id = os.path.basename(e.id.text) + '@google.com'
                 print 'fixing', id, 'for event', e.id.text
-                e.extended_property.append(gdata.calendar.ExtendedProperty(name='local_uid'
-                        , value=id))
+                e.extended_property.append(
+                    gdata.calendar.ExtendedProperty(
+                        name='local_uid', value=id))
                 try:
                     new_event = \
                         self.calendar_service.UpdateEvent(e.GetEditLink().href,
                             e)
                     print 'Fixed event (%s): %s' % (self.private_url,
-                            new_event.id.text)
+                                                    new_event.id.text)
                 except:
                     print >> sys.stderr, \
                         'WARNING: couldn\'t update entry %s to %s!' \
@@ -374,10 +376,10 @@ class GoogleCalendar:
         self.ical2gcal(e, event)
         try:
             new_event = \
-                self.calendar_service.UpdateEvent(e.GetEditLink().href,
-                    e)
-            print 'Updated event (%s): %s' % (self.private_url,
-                    new_event.id.text)
+                self.calendar_service.UpdateEvent(
+                    e.GetEditLink().href, e)
+            print 'Updated event (%s): %s' % (
+                self.private_url, new_event.id.text)
         except Exception, e:
             print >> sys.stderr, \
                 'WARNING: couldn\'t update entry %s to %s!' \
@@ -515,8 +517,6 @@ def process_section(section, login, password, calendar, ical_file):
 
     private_url = 'https://www.google.com/calendar/ical/' \
                   + calendar + '/private/basic.ics'
-
-    # private_url = 'https://www.google.com/calendar/ical/' + login + '/private/basic.ics'
 
     ical = iCalCalendar(ical_file)
 
