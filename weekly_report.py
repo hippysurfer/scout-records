@@ -32,8 +32,19 @@ import gspread
 import creds
 
 FROM = "Richard Taylor <r.taylor@bcs.org.uk>"
-TO = {'Group': ['hippysurfer@gmail.com', 'r.taylor@bcs.org.uk'],
-      'Maclean': ['maclean@7thlichfield.org.uk']}
+TO = {'Group': ['hippysurfer@gmail.com',
+                'mike.armstrong@7thlichfield.org.uk',
+                'adrian.grew@tesco.net'],
+      'Maclean': ['maclean@7thlichfield.org.uk'],
+      'Somers': ['somers@7thlichfield.org.uk'],
+      'Brown': [],
+      'Garrick': [],
+      'Paget': ['riddleshome@gmail.com'],
+      'Rowallan': ['markjoint@hotmail.co.uk'],
+      'Johnson': ['simon@scouting.me.uk'],
+      'Boswell': ['marc.henson@7thlichfield.org.uk'],
+      'Erasmus': [],
+      'Adult': ['susanjowen@btinternet.com']}
 
 DEF_CACHE = "osm.cache"
 DEF_CREDS = "osm.creds"
@@ -365,11 +376,12 @@ def _main(osm, auth, sections, no_email):
             for element in elements[section]:
                 element(r, group, section)
 
-        print(r.report())
-
-        if not no_email:
+        if no_email:
+            print(r.report())
+        else:
             r.send(TO[section],
                    'OSM Data Integrity Report for {}'.format(section))
+
 
 if __name__ == '__main__':
 
