@@ -126,7 +126,8 @@ class Reporter(object):
 def intro(r, group, section):
     r.title("Section report for {}".format(section))
 
-    r.p("This is an automatic report of the OSM data for '{}'".format(section))
+    r.p("This is an automatic report of the OSM data for '{}'. "
+        "It is sent on the first dat of each month.".format(section))
     r.p("Below is listed any potential problems with the data held "
         "in this section.")
     r.p("Please update the records to correct the identified issues.")
