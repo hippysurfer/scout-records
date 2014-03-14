@@ -2,7 +2,7 @@
 """Online Scout Manager Interface.
 
 Usage:
-  weekly_report.py [-d] <apiid> <token> <section>...
+  weekly_report.py [-d | --debug] [-n | --no_email] <apiid> <token> <section>...
   weekly_report.py (-h | --help)
   weekly_report.py --version
 
@@ -10,6 +10,7 @@ Usage:
 Options:
   <section>      Section to export.
   -d,--debug     Turn on debug output.
+  -n,--no_email  Do not send email.
   -h,--help      Show this screen.
   --version      Show version.
 
@@ -30,6 +31,9 @@ import finance
 import gspread
 import creds
 
+FROM = "Richard Taylor <r.taylor@bcs.org.uk>"
+TO = {'Group': ['hippysurfer@gmail.com', 'r.taylor@bcs.org.uk'],
+      'Maclean': ['maclean@7thlichfield.org.uk']}
 
 DEF_CACHE = "osm.cache"
 DEF_CREDS = "osm.creds"
@@ -50,24 +54,25 @@ class Reporter(object):
         self.t = ""
 
     def send(self, to, subject,
-             fro="rjt@thegrindstone.me.uk"):
+             fro=FROM):
 
-        msg = MIMEMultipart('alternative')
-        msg['Subject'] = subject
-        msg['From'] = fro
-        msg['To'] = to
+        for dest in to:
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = subject
+            msg['From'] = fro
+            msg['To'] = dest
 
-        body = MIMEText(self.t, 'html')
+            body = MIMEText(self.t, 'html')
 
-        msg.attach(body)
+            msg.attach(body)
 
-        hostname = 'www.thegrindstone.me.uk' \
-                   if not socket.gethostname() == 'rat' \
-                   else 'localhost'
+            hostname = 'www.thegrindstone.me.uk' \
+                       if not socket.gethostname() == 'rat' \
+                       else 'localhost'
 
-        s = smtplib.SMTP(hostname)
-        s.sendmail(fro, to, msg.as_string())
-        s.quit()
+            s = smtplib.SMTP(hostname)
+            s.sendmail(fro, dest, msg.as_string())
+            s.quit()
 
     def report(self):
         return "<html><head><style>{}</style></head>"\
@@ -111,25 +116,39 @@ def intro(r, group, section):
     r.title("Section report for {}".format(section))
 
     r.p("This is an automatic report of the OSM data for '{}'".format(section))
+    r.p("Below is listed any potential problems with the data held "
+        "in this section.")
+    r.p("Please update the records to correct the identified issues.")
+    r.p("You are receiving this email because you are listed as the OSM "
+        "coordinator for this section. If this is incorrect please let "
+        "me know so that I can correct the address.")
+    r.p("If there is nothing below this list it means that there are no "
+        "identified problems.")
 
 
 def check_bad_data(r, group, section):
     MIN_AGE = {
         'Brown': 5,
         'Paget': 5,
+        'Garrick': 5,
         'Maclean': 7,
         'Rowallan': 7,
+        'Somers': 7,
         'Johnson': 10,
         'Boswell': 10,
+        'Erasmus': 10,
     }
 
     MAX_AGE = {
         'Brown': 8,
         'Paget': 8,
+        'Garrick': 8,
         'Maclean': 10,
         'Rowallan': 10,
+        'Somers': 10,
         'Johnson': 15,
-        'Boswell': 15
+        'Boswell': 15,
+        'Erasmus': 15
     }
 
     members = group.section_yp_members_without_leaders(section) if \
@@ -240,9 +259,12 @@ def process_finance_spreadsheet(r, group):
     # in the same section in OSM.
     section_map = {'Maclean': 'MP',
                    'Rowallan': 'RP',
+                   'Somers': 'SP',
                    'Brown': 'BC',
+                   'Garrick': 'GC',
                    'Boswell': 'BT',
                    'Johnson': 'JT',
+                   'Erasmus': 'ET',
                    'Paget': 'PC'}
 
     changed_members = []
@@ -276,7 +298,8 @@ def census(r, group):
 
     for i in ['Beavers', 'Cubs', 'Scouts']:
         r.t_start(['Section', 'Sex'] +
-                  [str(age) for age in sorted(census[i]['M'].keys())])
+                  ["age - {} yrs".format(str(age))
+                   for age in sorted(census[i]['M'].keys())])
         r.t_row([i, 'Male'] + [census[i]['M'][j] for j
                                in sorted(census[i]['M'].keys())])
         r.t_row([i, 'Female'] + [census[i]['F'][j] for j
@@ -300,6 +323,9 @@ COMMON = [intro,
 
 elements = {'Maclean': COMMON,
             'Rowallan': COMMON,
+            'Garrick': COMMON,
+            'Somers': COMMON,
+            'Erasmus': COMMON,
             'Brown': COMMON,
             'Boswell': COMMON,
             'Johnson': COMMON,
@@ -319,7 +345,7 @@ def group_report(r, group):
             element(r, group, section)
 
 
-def _main(osm, auth, sections):
+def _main(osm, auth, sections, no_email):
 
     if isinstance(sections, str):
         sections = [sections, ]
@@ -340,7 +366,10 @@ def _main(osm, auth, sections):
                 element(r, group, section)
 
         print(r.report())
-        r.send('hippysurfer@gmail.com', 'Test from OSM reporter')
+
+        if not no_email:
+            r.send(TO[section],
+                   'OSM Data Integrity Report for {}'.format(section))
 
 if __name__ == '__main__':
 
@@ -357,7 +386,7 @@ if __name__ == '__main__':
     auth = osm.Authorisor(args['<apiid>'], args['<token>'])
     auth.load_from_file(open(DEF_CREDS, 'r'))
 
-    _main(osm, auth, args['<section>'])
+    _main(osm, auth, args['<section>'], args['--no_email'])
 
 
 
