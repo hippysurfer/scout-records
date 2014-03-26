@@ -112,10 +112,12 @@ def member2vcard(member, section):
     addr.value = vo.vcard.Address(street=member['PrimaryAddress'])
 
     item8 = j.add('X-ABLabel', 'item8')
-    item8.value = 'Secondary Address' if section != 'Adult' else 'NOK Address'
+    item8.value = 'Secondary Address' \
+                  if section != 'Adult' else 'NOK Address 1'
     addr = j.add('adr', 'item8')
     addr.value = vo.vcard.Address(
-        street=member['SecondaryAddress' if section != 'Adult' else 'NOKAddress'])
+        street=member['SecondaryAddress'
+                      if section != 'Adult' else 'NOKAddress1'])
 
     number, name = parse_tel(member['HomeTel'],
                              'Home')
@@ -124,19 +126,24 @@ def member2vcard(member, section):
     htel = j.add('tel', 'item9')
     htel.value = number
 
+    if section == 'Adult':
+        item10 = j.add('X-ABLabel', 'item10')
+        item10.value = 'NOK Address 2'
+        addr = j.add('adr', 'item10')
+        addr.value = vo.vcard.Address(
+            street=member['NOKAddress2'])
+
     bday = j.add('bday')
     bday.value = datetime.datetime.strptime(
         member['dob'], '%d/%m/%Y').strftime('%Y-%m-%d')
 
     note = j.add('note')
     if section == 'Adult':
-        note.value = "Medical: {}\nNotes: {}\n".format(
-            member['Medical'], member['Notes'])
+        note.value = "NOKs: {}\nMedical: {}\nNotes: {}\n".format(
+            member['NextofKinNames'], member['Medical'], member['Notes'])
     else:
         note.value = "Parents: {}\nMedical: {}\nNotes: {}\n".format(
             member['Parents'], member['Medical'], member['Notes'])
-    
-    
 
     return j.serialize()
 

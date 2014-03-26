@@ -24,8 +24,13 @@ import urllib.request, urllib.error, urllib.parse
 import json
 import pickle
 import logging
+import time
 import datetime
+import dateutil.tz
+import dateutil.parser
+import pytz
 import pprint
+import io
 import collections
 from operator import attrgetter
 
@@ -34,6 +39,10 @@ pp = pprint.PrettyPrinter(indent=4)
 
 DEF_CACHE = "osm.cache"
 DEF_CREDS = "osm.creds"
+
+TZ = dateutil.tz.gettz("Europe/London")
+pyTZ = pytz.timezone('Europe/London')
+FMT = '%Y-%m-%d %H:%M:%S %Z%z'
 
 
 class OSMException(Exception):
@@ -497,10 +506,18 @@ class Event(OSMObject):
             self._record['meetingdate'], '%Y-%m-%d')
 
         h, m, s = (int(i) for i in self._record['starttime'].split(':'))
-        self.start_time = datetime.time(h, m, s)
+        self.start_time = datetime.datetime.combine(
+            self.meeting_date,
+            datetime.time(h, m, s))
+        self.start_time = dateutil.parser.parse(
+            pyTZ.localize(self.start_time).strftime(FMT))
 
         h, m, s = (int(i) for i in self._record['endtime'].split(':'))
-        self.end_time = datetime.time(h, m, s)
+        self.end_time = datetime.datetime.combine(
+            self.meeting_date,
+            datetime.time(h, m, s))
+        self.end_time = dateutil.parser.parse(
+            pyTZ.localize(self.end_time).strftime(FMT))
 
     def __str__(self):
         return "{} - {} - {} - {} - {}".format(
@@ -581,7 +598,8 @@ class Section(OSMObject):
             self.programme = self._get_programme()
         except:
             log.warn("Failed to get programme for section {0}"
-                     .format(self['sectionname']))
+                     .format(self['sectionname']),
+                     exc_info=True)
             self.programme = []
           
     def __repr__(self):

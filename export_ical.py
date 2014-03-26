@@ -41,18 +41,16 @@ def orn(i):
 
 def event2ical(event, i):
     e = i.add('vevent')
-    
+
     pprint(str(event))
     e.add('summary').value = orn(event['title'])
     e.add('description').value = orn(event['notesforparents'])
 
-    if event.start_time != datetime.time(0, 0, 0):
-        e.add('dtstart').value = datetime.datetime.combine(event.meeting_date,
-                                                           event.start_time)
+    if event.start_time.time() != datetime.time(0, 0, 0):
+        e.add('dtstart').value = event.start_time
 
-    if event.end_time != datetime.time(0, 0, 0):
-        e.add('dtend').value = datetime.datetime.combine(event.meeting_date,
-                                                         event.end_time)
+    if event.end_time.time() != datetime.time(0, 0, 0):
+        e.add('dtend').value = event.end_time
 
     print("{!r}".format(event.end_time))
 
