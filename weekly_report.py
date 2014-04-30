@@ -21,6 +21,7 @@ from docopt import docopt
 import osm
 import smtplib
 import socket
+import re
 
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -30,6 +31,8 @@ from update import MAPPING, OSM_REF_FIELD
 import finance
 import gspread
 import creds
+
+PERSONAL_REFERENCE_RE = re.compile('^[A-Z0-9]{4}-[A-Z]{2}-\d{6}$')
 
 FROM = "Richard Taylor <r.taylor@bcs.org.uk>"
 TO = {'Group': ['hippysurfer@gmail.com',
@@ -176,6 +179,12 @@ def check_bad_data(r, group, section):
 
         if member['PersonalReference'].strip() == '':
             report.append("<b>Missing Personal Reference</b>")
+
+        elif not PERSONAL_REFERENCE_RE.match(
+                member['PersonalReference'].strip()):
+            report.append("<b>Bad Personal Reference ('{}')"
+                          " must match pattern: SSSS-FF-DDMMYY</b>".format(
+                              member['PersonalReference'].strip()))
 
         if member['PrimaryAddress'].strip() == '':
             report.append("Primary Address missing")
@@ -350,11 +359,30 @@ def group_report(r, group):
 
     census(r, group)
 
+    r.sub_title("Section Totals (including Scubbers)")
+    r.t_start(["Section", "Total YP"])
+
+    for section, members in group.all_yp_members_without_leaders_dict().items():
+        r.t_row([section, len(members)])
+
+    r.t_end()
+
+    r.sub_title("Section Totals (excluding Scubbers)")
+
+    r.t_start(["Section", "Total YP"])
+
+    for section, members in group.all_yp_members_without_senior_duplicates_dict().items():
+        r.t_row([section, len(members)])
+
+    r.t_end()
+
     process_finance_spreadsheet(r, group)
 
     for section in elements.keys():
         for element in elements[section]:
             element(r, group, section)
+
+
 
 
 def _main(osm, auth, sections, no_email):

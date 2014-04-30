@@ -81,6 +81,10 @@ class Group(object):
         return {s: self.section_all_members(s) for
                 s in self.YP_SECTIONS}
 
+    def all_yp_members_without_leaders_dict(self):
+        return {s: self.section_yp_members_without_leaders(s) for
+                s in self.YP_SECTIONS}
+
     def all_yp_members_without_senior_duplicates_dict(self):
         return {'Paget': self.remove_senior_duplicates('Paget',
                                                        self.all_cubs()),
@@ -92,10 +96,9 @@ class Group(object):
                                                           self.all_scouts()),
                 'Garrick': self.remove_senior_duplicates('Garrick',
                                                          self.all_scouts()),
-                'Erasmus': self.remove_senior_duplicates('Erasmus',
-                                                         self.all_scouts()),
                 'Somers': self.remove_senior_duplicates('Somers',
                                                         self.all_scouts()),
+                'Erasmus': self.section_yp_members_without_leaders('Erasmus'),
                 'Boswell': self.section_yp_members_without_leaders('Boswell'),
                 'Johnson': self.section_yp_members_without_leaders('Johnson')}
 
@@ -169,6 +172,12 @@ class Group(object):
     def remove_senior_duplicates(self, section, senior_members):
         kept_members = []
         for member in self.section_yp_members_without_leaders(section):
+            if member[OSM_REF_FIELD] == "":
+                # If no Personal Reference is set, do not look for
+                # duplicates
+                kept_members.append(member)
+                continue
+
             matching_senior_members = [senior_member for senior_member
                                        in senior_members
                                        if senior_member[OSM_REF_FIELD] ==
