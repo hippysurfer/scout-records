@@ -222,7 +222,7 @@ def process_finance_spreadsheet(r, group):
 
     # TODO: Parameterise the selection of the current quarter.
     q4_section = wks.col_values(
-        1 + headings.index('Q4 Sec'))[finance.FIN_HEADER_ROW:]
+        1 + headings.index('Q1 Sec'))[finance.FIN_HEADER_ROW:]
 
     all_yp = group.all_yp_members_without_senior_duplicates_dict()
 
