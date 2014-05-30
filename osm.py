@@ -596,6 +596,11 @@ class Section(OSMObject):
 
         try:
             self.programme = self._get_programme()
+        except urllib.error.HTTPError as err:
+            log.warn("Failed to get programme for section {0}: {1}"
+                     .format(self['sectionname'],
+                             err))
+            self.programme = []
         except:
             log.warn("Failed to get programme for section {0}"
                      .format(self['sectionname']),
