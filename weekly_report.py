@@ -2,7 +2,7 @@
 """Online Scout Manager Interface.
 
 Usage:
-  weekly_report.py [-d | --debug] [-n | --no_email] <apiid> <token> <section>...
+  weekly_report.py [-d | --debug] [-n | --no_email] [--email=<email>] <apiid> <token> <section>...
   weekly_report.py (-h | --help)
   weekly_report.py --version
 
@@ -11,6 +11,7 @@ Options:
   <section>      Section to export.
   -d,--debug     Turn on debug output.
   -n,--no_email  Do not send email.
+  --email=<email> Send to only this email address.
   -h,--help      Show this screen.
   --version      Show version.
 
@@ -385,7 +386,7 @@ def group_report(r, group):
 
 
 
-def _main(osm, auth, sections, no_email):
+def _main(osm, auth, sections, no_email, email):
 
     if isinstance(sections, str):
         sections = [sections, ]
@@ -407,6 +408,10 @@ def _main(osm, auth, sections, no_email):
 
         if no_email:
             print(r.report())
+        elif email:
+            print("Sending to {}".format(email))
+            r.send([email,],
+                   'OSM Data Integrity Report for {}'.format(section))            
         else:
             r.send(TO[section],
                    'OSM Data Integrity Report for {}'.format(section))
@@ -427,7 +432,7 @@ if __name__ == '__main__':
     auth = osm.Authorisor(args['<apiid>'], args['<token>'])
     auth.load_from_file(open(DEF_CREDS, 'r'))
 
-    _main(osm, auth, args['<section>'], args['--no_email'])
+    _main(osm, auth, args['<section>'], args['--no_email'], args['--email'])
 
 
 
