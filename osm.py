@@ -175,6 +175,11 @@ class Accessor(object):
         
           try:
             result = urllib.request.urlopen(req).readall().decode('utf-8')
+          except urllib.error.HTTPError as err:
+              if str(err) != 'HTTP Error 500: No permissions':
+                  # We don't want to winge about permissions errors here.
+                  log.error("urlopen failed: {0}, {1}".format(url, data.encode('utf-8')))
+              raise
           except:
             log.error("urlopen failed: {0}, {1}".format(url, data.encode('utf-8')))
             raise
@@ -533,10 +538,20 @@ class Programme(OSMObject):
         self._accessor = accessor
 
         events = {}
-        for event in record['items']:
-            events["{} - {}".format(
-                event['title'],
-                event['meetingdate'])] = Event(osm, section, accessor, event)
+
+        if record != []:
+            # If the record is an empty list it means that the programme
+            # is empty.            
+            try:
+                for event in record['items']:
+                    events["{} - {}".format(
+                        event['title'],
+                        event['meetingdate'])] = Event(osm, section, accessor, event)
+            except:
+                log.warn("Failed to process events in programme for section: {0}\n"
+                         "record = {1}\n error = {2}".format(section['sectionname'],
+                                                             repr(record),
+                                                             sys.exc_info()[0]))
 
         OSMObject.__init__(self, osm, accessor, events)
 
