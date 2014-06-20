@@ -134,17 +134,17 @@ def member2vcards(member, section):
 
     note = j.add('note')
     if section == 'Adult':
-        note.value = "NOKs: {}\nMedical: {}\nNotes: {}\n".format(
-            member['NextofKinNames'], member['Medical'], member['Notes'])
+        note.value = "NOKs: {}\nMedical: {}\nNotes: {}\nSection: {}\n".format(
+            member['NextofKinNames'], member['Medical'], member['Notes'], section)
         cat.value = ("7th", "7th Adult")
     elif member.get('Patrol','') == 'Leaders':
-        note.value = "NOKs: {}\nMedical: {}\nNotes: {}\nRole:{}\n".format(
-            member['Parents'], member['Medical'], member['Notes'], member.get('Patrol',''))
+        note.value = "NOKs: {}\nMedical: {}\nNotes: {}\nRole:{}\nSection: {}\n".format(
+            member['Parents'], member['Medical'], member['Notes'], member.get('Patrol',''), section)
         cat.value = ("7th", "7th Section Leader")
     else:
         cat.value = ("7th", "7th YP")
-        note.value = "Parents: {}\nMedical: {}\nNotes: {}\nPatrol:{}\n".format(
-            member['Parents'], member['Medical'], member['Notes'], member.get('Patrol',''))
+        note.value = "Parents: {}\nMedical: {}\nNotes: {}\nPatrol:{}\nSection: {}\n".format(
+            member['Parents'], member['Medical'], member['Notes'], member.get('Patrol',''), section)
 
 
     ret = [j.serialize(), ]
