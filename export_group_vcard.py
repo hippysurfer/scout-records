@@ -2,7 +2,7 @@
 """Online Scout Manager Interface.
 
 Usage:
-  export_group_vcard.py [-d] <apiid> <token> <outdir> <section>... 
+  export_group_vcard.py [-d] [--email=<address>] <apiid> <token> <outdir> <section>... 
   export_group_vcard.py (-h | --help)
   export_group_vcard.py --version
 
@@ -11,6 +11,7 @@ Options:
   <section>      Section to export.
   <outdir>       Output directory for vcard files.
   -d,--debug     Turn on debug output.
+  --email=<email> Send to only this email address.
   -h,--help      Show this screen.
   --version      Show version.
 
@@ -20,9 +21,14 @@ import os.path
 import logging
 import datetime
 import itertools
+import socket
+import smtplib
 from docopt import docopt
 import osm
 import vobject as vo
+
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 from group import Group, OSM_REF_FIELD
 from update import MAPPING
@@ -31,6 +37,35 @@ log = logging.getLogger(__name__)
 
 DEF_CACHE = "osm.cache"
 DEF_CREDS = "osm.creds"
+
+FROM = "Richard Taylor <r.taylor@bcs.org.uk>"
+
+def send(to, subject, vcards, fro=FROM):
+
+    for dest in to:
+        msg = MIMEMultipart()
+        msg['Subject'] = subject
+        msg['From'] = fro
+        msg['To'] = dest
+
+        body = MIMEText(vcards, 'vcard')
+        body.add_header('Content-Disposition', 'attachment', 
+                        filename="group.vcf")    
+        msg.attach(body)
+
+        hostname = 'www.thegrindstone.me.uk' \
+            if not socket.gethostname() == 'rat' \
+            else 'localhost'
+
+        s = smtplib.SMTP(hostname)
+
+        try:
+            s.sendmail(fro, dest, msg.as_string())
+        except:
+            log.error(msg.as_string(),
+                      exc_info=True)
+
+        s.quit()
 
 
 def parse_tel(number_field, default_name):
@@ -182,16 +217,16 @@ def member2vcards(member, section):
             dad = None
 
     if dad:
-        ret += process_parent(member, dad,
-                              member['DadEmail'],
-                              member['DadMob'],
-                              section)
+        ret += [process_parent(member, dad,
+                               member['DadEmail'],
+                               member['DadMob'],
+                               section),]
 
     if mum:
-        ret += process_parent(member, mum,
-                              member['MumEmail'],
-                              member['MumMob'],
-                              section)
+        ret += [process_parent(member, mum,
+                               member['MumEmail'],
+                               member['MumMob'],
+                               section),]
     
     return ret
 
@@ -262,7 +297,7 @@ def process_parent(member, parent, email, mob, section):
     return j.serialize()
 
 
-def _main(osm, auth, sections, outdir):
+def _main(osm, auth, sections, outdir, email):
 
     assert os.path.exists(outdir) and os.path.isdir(outdir)
 
@@ -278,10 +313,14 @@ def _main(osm, auth, sections, outdir):
         section_vcards = [member2vcards(member, section) for
                           member in group.section_all_members(section)]
 
+
         # flatten list of lists.
         vcards += list(itertools.chain(*section_vcards))
 
     open(os.path.join(outdir, "group.vcf"), 'w').writelines(vcards)
+
+    if email:
+        send([email,], "OSM Group vcards", "".join(vcards))
 
 if __name__ == '__main__':
 
@@ -298,7 +337,8 @@ if __name__ == '__main__':
     auth = osm.Authorisor(args['<apiid>'], args['<token>'])
     auth.load_from_file(open(DEF_CREDS, 'r'))
 
-    _main(osm, auth, args['<section>'], args['<outdir>'])
+    _main(osm, auth, args['<section>'],
+          args['<outdir>'], args['--email'])
 
 
 
