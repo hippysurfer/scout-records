@@ -142,8 +142,8 @@ def member2vcard(member, section):
         note.value = "NOKs: {}\nMedical: {}\nNotes: {}\n".format(
             member['NextofKinNames'], member['Medical'], member['Notes'])
     else:
-        note.value = "Parents: {}\nMedical: {}\nNotes: {}\n".format(
-            member['Parents'], member['Medical'], member['Notes'])
+        note.value = "Parents: Dad - {} Mum - {}\nMedical: {}\nNotes: {}\n".format(
+            member['DadsName'], member['MumsName'], member['Medical'], member['Notes'])
 
     return j.serialize()
 

@@ -174,12 +174,13 @@ def member2vcards(member, section):
         cat.value = ("7th", "7th Adult")
     elif member.get('Patrol','') == 'Leaders':
         note.value = "NOKs: {}\nMedical: {}\nNotes: {}\nRole:{}\nSection: {}\n".format(
-            member['Parents'], member['Medical'], member['Notes'], member.get('Patrol',''), section)
+            member['DadsName'], member['Medical'], member['Notes'], member.get('Patrol',''), section)
         cat.value = ("7th", "7th Section Leader")
     else:
         cat.value = ("7th", "7th YP")
-        note.value = "Parents: {}\nMedical: {}\nNotes: {}\nPatrol:{}\nSection: {}\n".format(
-            member['Parents'], member['Medical'], member['Notes'], member.get('Patrol',''), section)
+        note.value = "Parents: Dad - {} / Mum - {}\nMedical: {}\nNotes: {}\nPatrol:{}\nSection: {}\n".format(
+            member['DadsName'], member['MumsName'], member['Medical'], 
+            member['Notes'], member.get('Patrol',''), section)
 
 
     ret = [j.serialize(), ]
@@ -192,38 +193,30 @@ def member2vcards(member, section):
 
     # Try to work out the parents entries.
 
-    try:
-        if member['parents'].count('&') != 0:
-            sep = "&"
-        else:
-            sep = "/"
-        (dad, mum) = member['parents'].split(sep, 2)
-        dad.strip()
-        mum.strip()
-    except ValueError:
-        # This means the parents field does not have a seperator.
-        # If it is not empty and there is an email address for Dad 
-        # we assume that it is dad, otherwise we assume it is Mum
-        if ( member['parents'].strip() != '' and
-             member['DadEmail'].strip() != '' ):
-            dad = member['parents'].strip()
-            mum = None
-        elif ( member['parents'].strip() != '' and
-               member['MumEmail'].strip() != '' ):
-            mum = member['parents'].strip()
-            dad = None
-        else:
-            mum = None
-            dad = None
+    # If it is not empty and there is an email address for Dad 
+    # we assume that it is dad, otherwise we assume it is Mum
 
-    if dad:
-        ret += [process_parent(member, dad,
+    if (  ):
+        dad = member['DadsName'].strip()
+        mum = None
+    elif ( member['parents'].strip() != '' and
+           member['MumEmail'].strip() != '' ):
+        mum = member['parents'].strip()
+        dad = None
+    else:
+        mum = None
+        dad = None
+
+    if member['DadsName'].strip() != '':
+        ret += [process_parent(member, 
+                               member['DadsName'],
                                member['DadEmail'],
                                member['DadMob'],
                                section),]
 
-    if mum:
-        ret += [process_parent(member, mum,
+    if member['MumsName'].strip() != '':
+        ret += [process_parent(member,
+                               member['MumsName'],
                                member['MumEmail'],
                                member['MumMob'],
                                section),]
