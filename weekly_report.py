@@ -2,7 +2,7 @@
 """Online Scout Manager Interface.
 
 Usage:
-  weekly_report.py [-d | --debug] [-n | --no_email] [--email=<email>] <apiid> <token> <section>...
+  weekly_report.py [-d | --debug] [-n | --no_email] [--email=<email>] [--quarter=<quarter>] <apiid> <token> <section>...
   weekly_report.py (-h | --help)
   weekly_report.py --version
 
@@ -12,6 +12,7 @@ Options:
   -d,--debug     Turn on debug output.
   -n,--no_email  Do not send email.
   --email=<email> Send to only this email address.
+  --quarter=<quarter> Which quarter to use [default: current].
   -h,--help      Show this screen.
   --version      Show version.
 
@@ -23,6 +24,8 @@ import osm
 import smtplib
 import socket
 import re
+import sys
+import datetime
 
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -214,7 +217,7 @@ def check_bad_data(r, group, section):
             r.ul(report[1])
 
 
-def process_finance_spreadsheet(r, group):
+def process_finance_spreadsheet(r, group, quarter):
     log.info("Processing finance spreadsheet...")
 
     gc = gspread.login(*creds.creds)
@@ -232,7 +235,7 @@ def process_finance_spreadsheet(r, group):
 
     # TODO: Parameterise the selection of the current quarter.
     q4_section = wks.col_values(
-        1 + headings.index('Q1 Sec'))[finance.FIN_HEADER_ROW:]
+        1 + headings.index('{} Sec'.format(quarter)))[finance.FIN_HEADER_ROW:]
 
     all_yp = group.all_yp_members_without_senior_duplicates_dict()
 
@@ -289,16 +292,26 @@ def process_finance_spreadsheet(r, group):
                    'Erasmus': 'ET',
                    'Paget': 'PC'}
 
+    log.debug("fin_references - {}".format(fin_references))
+    log.debug("q_section - {}".format(q4_section))
+
     changed_members = []
     for name, section_members in all_yp.items():
         for member in section_members:
-            if member[OSM_REF_FIELD] in fin_references \
-               and section_map[name] != q4_section[fin_references.index(
-                   member[OSM_REF_FIELD])]:
-                changed_members.append((member,
-                                        q4_section[fin_references.index(
-                                            member[OSM_REF_FIELD])],
-                                        section_map[name]))
+            log.debug("member = {}".format(member))
+            if member[OSM_REF_FIELD] in fin_references:
+                try:
+                    previous_section = q4_section[fin_references.index(
+                            member[OSM_REF_FIELD])]
+                except IndexError:
+                    # If the spreadsheet does not have enough columns we assume that
+                    # the previous section was None: i.e. this is a new YP.
+                    previous_section = ""
+
+                if section_map[name] != previous_section:
+                    changed_members.append((member,
+                                            previous_section,
+                                            section_map[name]))
 
     r.sub_title("Changed members")
     r.t_start(["Personal Reference", "Old", "New", "First", "Last"])
@@ -355,8 +368,8 @@ elements = {'Maclean': COMMON,
             'Adult': COMMON}
 
 
-def group_report(r, group):
-    r.title("Group Report")
+def group_report(r, group, quarter):
+    r.title("Group Report (Quarter: {})".format(quarter))
 
     census(r, group)
 
@@ -377,7 +390,7 @@ def group_report(r, group):
 
     r.t_end()
 
-    process_finance_spreadsheet(r, group)
+    process_finance_spreadsheet(r, group, quarter)
 
     for section in elements.keys():
         for element in elements[section]:
@@ -386,7 +399,7 @@ def group_report(r, group):
 
 
 
-def _main(osm, auth, sections, no_email, email):
+def _main(osm, auth, sections, no_email, email, quarter):
 
     if isinstance(sections, str):
         sections = [sections, ]
@@ -401,7 +414,7 @@ def _main(osm, auth, sections, no_email, email):
         r = Reporter()
 
         if section == 'Group':
-            group_report(r, group)
+            group_report(r, group, quarter)
         else:
             for element in elements[section]:
                 element(r, group, section)
@@ -416,6 +429,15 @@ def _main(osm, auth, sections, no_email, email):
             r.send(TO[section],
                    'OSM Data Integrity Report for {}'.format(section))
 
+def get_quarter():
+    """Return the currect quarter from todays date."""
+    month = datetime.datetime.today().month
+    if month in [4, 5, 6]: return "Q1"
+    if month in [7, 8, 9]: return "Q2"
+    if month in [10, 11, 12]: return "Q3"
+    if month in [1, 2, 3]: return "Q4"
+
+
 
 if __name__ == '__main__':
 
@@ -424,15 +446,28 @@ if __name__ == '__main__':
     if args['--debug']:
         level = logging.DEBUG
     else:
-        level = logging.INFO
+        level = logging.ERROR
 
     logging.basicConfig(level=level)
     log.debug("Debug On\n")
 
+    if args['--quarter'] in [None, 'current']:
+        args['--quarter'] = get_quarter()
+
+    if args['--quarter'] not in ['Q1', 'Q2', 'Q3', 'Q4']:
+        log.error("Invalid quarter ({}): quarter must be in "
+                  "['Q1', 'Q2', 'Q3', 'Q4']".format(args['--quarter']))
+        sys.exit(1)
+
+
     auth = osm.Authorisor(args['<apiid>'], args['<token>'])
     auth.load_from_file(open(DEF_CREDS, 'r'))
 
-    _main(osm, auth, args['<section>'], args['--no_email'], args['--email'])
+    _main(osm, auth, 
+          args['<section>'], 
+          args['--no_email'], 
+          args['--email'],
+          args['--quarter'])
 
 
 
