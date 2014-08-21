@@ -710,7 +710,7 @@ class OSM(object):
                         self.section.term['name']))
 
         if self.section is None:
-            self.section = self.sections[-1]
+            self.section = list(self.sections.values())[-1]
 
         # Warn if the active term is different for any of the 
         # selected selections.
