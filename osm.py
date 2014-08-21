@@ -563,7 +563,7 @@ class Programme(OSMObject):
     
 
 class Section(OSMObject):
-    def __init__(self, osm, accessor, record, init=True):
+    def __init__(self, osm, accessor, record, init=True, term=None):
         OSMObject.__init__(self, osm, accessor, record)
 
         try:
@@ -572,20 +572,34 @@ class Section(OSMObject):
             log.debug("No extra member columns.")
             self._member_column_map = {}
 
+        self.requested_term = term
+
         if init:
           self.init()
 
     def init(self):
-        self.terms = [term for term in self._osm.terms(self['sectionid'])
-                      if term.is_active()]
+        if self.requested_term is not None:
+            # We have requested a specific term.
+            self.terms = [term for term in self._osm.terms(self['sectionid'])
+                          if term['name'] == self.requested_term]
 
-        if len(self.terms) > 1:
-            log.warn("{!r}: More than 1 term is active, picking "
-                     "last in list {!r}".format(
-                         self['sectionname'],
-                         [(term['name'], term['past']) for
-                          term in self.terms]))
-            sys.exit(0)
+            if len(self.terms) != 1:
+                log.error("Requested term ({}) is not in available terms ({})".format(
+                        self.requested_term,
+                        ",".join([term['name'] for term in self.terms])))
+                sys.exit(1)
+
+        else:
+            self.terms = [term for term in self._osm.terms(self['sectionid'])
+                          if term.is_active()]
+
+            if len(self.terms) > 1:
+                log.error("{!r}: More than 1 term is active, picking "
+                          "last in list {!r}".format(
+                        self['sectionname'],
+                        [(term['name'], term['past']) for
+                         term in self.terms]))
+                sys.exit(1)
 
         if len(self.terms) == 0:
             # If there is no active term it does make sense to gather
@@ -668,20 +682,20 @@ class Section(OSMObject):
 
 
 class OSM(object):
-    def __init__(self, authorisor, sectionid_list=False):
+    def __init__(self, authorisor, sectionid_list=False, term=None):
         self._accessor = Accessor(authorisor)
 
         self.sections = {}
         self.section = None
 
-        self.init(sectionid_list)
+        self.init(sectionid_list, term)
 
-    def init(self, sectionid_list=False):
+    def init(self, sectionid_list=False, term=None):
         roles = self._accessor('api.php?action=getUserRoles')
 
         self.sections = {}
 
-        for section in [Section(self, self._accessor, role, init=False)
+        for section in [Section(self, self._accessor, role, init=False, term=term)
                         for role in roles
                         if 'section' in role]:
             if sectionid_list is False or \
@@ -698,6 +712,13 @@ class OSM(object):
         if self.section is None:
             self.section = self.sections[-1]
 
+        # Warn if the active term is different for any of the 
+        # selected selections.
+
+        if len(set([section.term['name'] for section in self.sections.values()])) != 1:
+            log.warn("Not all sections have the same active term: {}".format(
+                    "\n".join(["{} - {}".format(
+                                section['sectionname'], section.term['name']) for section in self.sections.values()])))
     def terms(self, sectionid):
         terms = self._accessor('api.php?action=getTerms')
         if sectionid in terms:

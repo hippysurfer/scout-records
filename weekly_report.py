@@ -2,7 +2,7 @@
 """Online Scout Manager Interface.
 
 Usage:
-  weekly_report.py [-d | --debug] [-n | --no_email] [--email=<email>] [--quarter=<quarter>] <apiid> <token> <section>...
+  weekly_report.py [-d | --debug] [-n | --no_email] [--email=<email>] [--quarter=<quarter>] [--term=<term>] <apiid> <token> <section>...
   weekly_report.py (-h | --help)
   weekly_report.py --version
 
@@ -13,6 +13,7 @@ Options:
   -n,--no_email  Do not send email.
   --email=<email> Send to only this email address.
   --quarter=<quarter> Which quarter to use [default: current].
+  --term=<term>  Which OSM term to use [default: current].
   -h,--help      Show this screen.
   --version      Show version.
 
@@ -368,8 +369,8 @@ elements = {'Maclean': COMMON,
             'Adult': COMMON}
 
 
-def group_report(r, group, quarter):
-    r.title("Group Report (Quarter: {})".format(quarter))
+def group_report(r, group, quarter, term):
+    r.title("Group Report (Quarter: {} Term: {})".format(quarter, term))
 
     census(r, group)
 
@@ -399,12 +400,12 @@ def group_report(r, group, quarter):
 
 
 
-def _main(osm, auth, sections, no_email, email, quarter):
+def _main(osm, auth, sections, no_email, email, quarter, term):
 
     if isinstance(sections, str):
         sections = [sections, ]
 
-    group = Group(osm, auth, MAPPING.keys())
+    group = Group(osm, auth, MAPPING.keys(), term)
 
     for section in sections:
         assert section in list(group.SECTIONIDS.keys()) + ['Group', ], \
@@ -414,7 +415,8 @@ def _main(osm, auth, sections, no_email, email, quarter):
         r = Reporter()
 
         if section == 'Group':
-            group_report(r, group, quarter)
+            group_report(r, group, quarter, 
+                         term if term is not None else "Active")
         else:
             for element in elements[section]:
                 element(r, group, section)
@@ -446,10 +448,13 @@ if __name__ == '__main__':
     if args['--debug']:
         level = logging.DEBUG
     else:
-        level = logging.ERROR
+        level = logging.WARN
 
     logging.basicConfig(level=level)
     log.debug("Debug On\n")
+
+    if args['--term'] in [None, 'current']:
+        args['--term'] = None
 
     if args['--quarter'] in [None, 'current']:
         args['--quarter'] = get_quarter()
@@ -467,7 +472,8 @@ if __name__ == '__main__':
           args['<section>'], 
           args['--no_email'], 
           args['--email'],
-          args['--quarter'])
+          args['--quarter'],
+          args['--term'])
 
 
 
