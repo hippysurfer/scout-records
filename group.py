@@ -43,7 +43,7 @@ class Group(object):
                    'Erasmus',
                    'Somers']
 
-    def __init__(self, osm, auth, important_fields, term):
+    def __init__(self, osm, auth, important_fields, term=None):
         self._osm = osm
         self._important_fields = important_fields
         self._sections = self._osm.OSM(auth, self.SECTIONIDS.values(), term)

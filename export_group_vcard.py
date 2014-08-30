@@ -2,7 +2,7 @@
 """Online Scout Manager Interface.
 
 Usage:
-  export_group_vcard.py [-d] [--email=<address>] <apiid> <token> <outdir> <section>... 
+  export_group_vcard.py [-d] [--term=<term>] [--email=<address>] <apiid> <token> <outdir> <section>... 
   export_group_vcard.py (-h | --help)
   export_group_vcard.py --version
 
@@ -12,6 +12,7 @@ Options:
   <outdir>       Output directory for vcard files.
   -d,--debug     Turn on debug output.
   --email=<email> Send to only this email address.
+  --term=<term>  Which OSM term to use [default: current].
   -h,--help      Show this screen.
   --version      Show version.
 
@@ -290,11 +291,11 @@ def process_parent(member, parent, email, mob, section):
     return j.serialize()
 
 
-def _main(osm, auth, sections, outdir, email):
+def _main(osm, auth, sections, outdir, email, term):
 
     assert os.path.exists(outdir) and os.path.isdir(outdir)
 
-    group = Group(osm, auth, MAPPING.keys())
+    group = Group(osm, auth, MAPPING.keys(), term)
 
     for section in sections:
         assert section in group.SECTIONIDS.keys(), \
@@ -324,6 +325,9 @@ if __name__ == '__main__':
     else:
         level = logging.INFO
 
+    if args['--term'] in [None, 'current']:
+        args['--term'] = None
+
     logging.basicConfig(level=level)
     log.debug("Debug On\n")
 
@@ -331,7 +335,7 @@ if __name__ == '__main__':
     auth.load_from_file(open(DEF_CREDS, 'r'))
 
     _main(osm, auth, args['<section>'],
-          args['<outdir>'], args['--email'])
+          args['<outdir>'], args['--email'], args['--term'])
 
 
 
