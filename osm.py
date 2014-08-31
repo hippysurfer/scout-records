@@ -251,9 +251,11 @@ class Term(OSMObject):
                                                   '%Y-%m-%d')
 
     def is_active(self):
-        now = datetime.datetime.now()
-        return (self.startdate < now) and (self.enddate > now)
+        now = datetime.datetime.now().date()
+        return (self.startdate.date() < now) and (self.enddate.date() >= now)
 
+    def __repr__(self):
+        return "{}: {} - {} {}".format(self['name'], self.startdate, self.enddate, datetime.datetime.now())
 
 class Badge(OSMObject):
     def __init__(self, osm, accessor, section, badge_type, details, structure):
@@ -578,6 +580,7 @@ class Section(OSMObject):
           self.init()
 
     def init(self):
+        log.debug("Requested term = {}".format(self.requested_term))
         if self.requested_term is not None:
             # We have requested a specific term.
             self.terms = [term for term in self._osm.terms(self['sectionid'])
@@ -590,8 +593,13 @@ class Section(OSMObject):
                 sys.exit(1)
 
         else:
+            self.terms = [term for term in self._osm.terms(self['sectionid'])]
+            log.debug("All terms = {!r}".format(self.terms))
+
             self.terms = [term for term in self._osm.terms(self['sectionid'])
                           if term.is_active()]
+
+            log.debug("Active terms = {!r}".format(self.terms))
 
             if len(self.terms) > 1:
                 log.error("{!r}: More than 1 term is active, picking "
@@ -615,7 +623,8 @@ class Section(OSMObject):
             self.activity = self._get_badges('activity')
             self.staged = self._get_badges('staged')
             self.core = self._get_badges('core')
-        
+ 
+        log.debug("Configured term = {}".format(self.term))
         try:
             self.members = self._get_members()
         except:
