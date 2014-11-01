@@ -45,13 +45,13 @@ TO = {'Group': ['hippysurfer@gmail.com',
                 'adrian.grew@tesco.net'],
       'Maclean': ['maclean@7thlichfield.org.uk'],
       'Somers': ['somers@7thlichfield.org.uk'],
-      'Brown': [],
-      'Garrick': [],
+      'Brown': ['cathbab2002@yahoo.co.uk', 'pten2106@yahoo.co.uk'],
+      'Garrick': ['caroline_fellows@hotmail.com'],
       'Paget': ['riddleshome@gmail.com'],
       'Rowallan': ['markjoint@hotmail.co.uk'],
       'Johnson': ['simon@scouting.me.uk'],
       'Boswell': ['marc.henson@7thlichfield.org.uk'],
-      'Erasmus': [],
+      'Erasmus': ['paul@scouting.me.uk'],
       'Adult': ['susanjowen@btinternet.com']}
 
 DEF_CACHE = "osm.cache"
