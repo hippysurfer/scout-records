@@ -252,17 +252,20 @@ class Term(OSMObject):
 
     def is_active(self):
         now = datetime.datetime.now().date()
-        return (self.startdate.date() < now) and (self.enddate.date() >= now)
+        return (self.startdate.date() <= now) and (self.enddate.date() >= now)
 
     def __repr__(self):
-        return "{}: {} - {} {}".format(self['name'], self.startdate, self.enddate, datetime.datetime.now())
+        return "{}: {} - {} {}".format(self['name'],
+                                       self.startdate,
+                                       self.enddate,
+                                       datetime.datetime.now())
 
 class Badge(OSMObject):
     def __init__(self, osm, accessor, section, badge_type, details, structure):
         self._section = section
         self._badge_type = badge_type
         self.name = details['name']
-        self.table = details['table']
+        #self.table = details['table']
 
         activities = {}
         if len(structure) > 1:
@@ -294,7 +297,7 @@ class Badges(OSMObject):
         self._badge_type = badge_type
         self._order = record['badgeOrder']
         self._details = record['details']
-        self._stock = record['stock']
+        #self._stock = record['stock']
         self._structure = record['structure']
 
         badges = {}
