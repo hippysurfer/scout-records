@@ -2,7 +2,7 @@
 """Online Scout Manager Interface.
 
 Usage:
-  export_vcards.py [-d] <apiid> <token> <outdir> <section>... 
+  export_vcards.py [-d] [--term=<term>] <apiid> <token> <outdir> <section>... 
   export_vcards.py (-h | --help)
   export_vcards.py --version
 
@@ -10,6 +10,7 @@ Usage:
 Options:
   <section>      Section to export.
   <outdir>       Output directory for vcard files.
+  --term=<term>  Which OSM term to use [default: current].
   -d,--debug     Turn on debug output.
   -h,--help      Show this screen.
   --version      Show version.
@@ -112,10 +113,12 @@ def member2vcard(member, section):
     addr.value = vo.vcard.Address(street=member['PrimaryAddress'])
 
     item8 = j.add('X-ABLabel', 'item8')
-    item8.value = 'Secondary Address' if section != 'Adult' else 'NOK Address'
+    item8.value = 'Secondary Address' \
+                  if section != 'Adult' else 'NOK Address 1'
     addr = j.add('adr', 'item8')
     addr.value = vo.vcard.Address(
-        street=member['SecondaryAddress' if section != 'Adult' else 'NOKAddress'])
+        street=member['SecondaryAddress'
+                      if section != 'Adult' else 'NOKAddress1'])
 
     number, name = parse_tel(member['HomeTel'],
                              'Home')
@@ -124,28 +127,33 @@ def member2vcard(member, section):
     htel = j.add('tel', 'item9')
     htel.value = number
 
+    if section == 'Adult':
+        item10 = j.add('X-ABLabel', 'item10')
+        item10.value = 'NOK Address 2'
+        addr = j.add('adr', 'item10')
+        addr.value = vo.vcard.Address(
+            street=member['NOKAddress2'])
+
     bday = j.add('bday')
     bday.value = datetime.datetime.strptime(
         member['dob'], '%d/%m/%Y').strftime('%Y-%m-%d')
 
     note = j.add('note')
     if section == 'Adult':
-        note.value = "Medical: {}\nNotes: {}\n".format(
-            member['Medical'], member['Notes'])
+        note.value = "NOKs: {}\nMedical: {}\nNotes: {}\n".format(
+            member['NextofKinNames'], member['Medical'], member['Notes'])
     else:
-        note.value = "Parents: {}\nMedical: {}\nNotes: {}\n".format(
-            member['Parents'], member['Medical'], member['Notes'])
-    
-    
+        note.value = "Parents: Dad - {} Mum - {}\nMedical: {}\nNotes: {}\n".format(
+            member['DadsName'], member['MumsName'], member['Medical'], member['Notes'])
 
     return j.serialize()
 
 
-def _main(osm, auth, sections, outdir):
+def _main(osm, auth, sections, outdir, term):
 
     assert os.path.exists(outdir) and os.path.isdir(outdir)
 
-    group = Group(osm, auth, MAPPING.keys())
+    group = Group(osm, auth, MAPPING.keys(), term)
 
     for section in sections:
         assert section in group.SECTIONIDS.keys(), \
@@ -169,10 +177,14 @@ if __name__ == '__main__':
     logging.basicConfig(level=level)
     log.debug("Debug On\n")
 
+    if args['--term'] in [None, 'current']:
+        args['--term'] = None
+
     auth = osm.Authorisor(args['<apiid>'], args['<token>'])
     auth.load_from_file(open(DEF_CREDS, 'r'))
 
-    _main(osm, auth, args['<section>'], args['<outdir>'])
+    _main(osm, auth, args['<section>'], args['<outdir>'],
+          args['--term'])
 
 
 

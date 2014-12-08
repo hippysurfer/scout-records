@@ -50,8 +50,7 @@ ADULT_MAPPING = {'firstname': 'Firstname',
                  'NOKEmail2': 'NOK Email2',
                  'dob': 'Date of birth',
                  'PrimaryAddress': 'Primary Address',
-                 'NOKAddress': 'NOK Address',
-                 #'Parents': 'Parents',
+                 'NOKAddress1': 'NOK Address',
                  'Notes': 'Notes',
                  'Medical': 'Medical',
                  'PlaceofWork': 'Place of Work',
@@ -65,7 +64,8 @@ ADULT_MAPPING = {'firstname': 'Firstname',
                  #'ScoutTroop':'Scout Troop',
                  'FamilyReference': 'Family Reference',
                  'PersonalReference': 'Personal Reference',
-                 'Ethnicity':'Ethnicity'}
+                 #'Ethnicity':'Ethnicity'
+                 }
 
 
 MAPPING = {'firstname': 'Firstname',
@@ -82,22 +82,25 @@ MAPPING = {'firstname': 'Firstname',
            'dob': 'Date of birth',
            'PrimaryAddress': 'Primary Address',
            'SecondaryAddress': 'Secondary Address',
-           'Parents': 'Parents',
+           'DadsName': 'Dads Name',
+           'MumsName': 'Dads Name',
            'Notes': 'Notes',
            'Medical': 'Medical',
            'School': 'School',
            'Hobbies': 'Hobbies',
-           'GiftAid': 'Gift Aid',
+           'DadDBS': 'Dad DBS',
+           'MumDBS': 'Mum DBS',
            'Sex': 'Sex',
            'FathersOccupation': 'Fathers Occupation',
            'MothersOccupation': 'Mothers Occupation',
-           'Datetonextsection': 'Date to next section',
-           'BeaverColony': 'Beaver Colony',
-           'CubPack': 'Cub Pack',
-           'ScoutTroop': 'Scout Troop',
+           #'Datetonextsection': 'Date to next section',
+           #'BeaverColony': 'Beaver Colony',
+           #'CubPack': 'Cub Pack',
+           #'ScoutTroop': 'Scout Troop',
            'FamilyReference': 'Family Reference',
            'PersonalReference': 'Personal Reference',
-           'Ethnicity': 'Ethnicity'}
+           #'Ethnicity': 'Ethnicity'
+           }
 
 TOP_OFFSET = 3  # Number of rows above the heading row in the gs
 HEADER_ROW = TOP_OFFSET + 1

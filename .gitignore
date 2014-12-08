@@ -37,4 +37,6 @@ nosetests.xml
 
 # Creds file
 creds.py
+osm.creds
+owncloud_accounts.py
 

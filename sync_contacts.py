@@ -29,13 +29,7 @@ from carddav_util.carddav import PyCardDAV
 import vobject
 import uuid
 
-ACCOUNTS = {'Brown': ('brown', 'brown.beavers'),
-            'Paget': ('paget', 'paget.beavers'),
-            'Rowallan': ('rowallan', 'rowallan.cubs'),
-            'Maclean': ('maclean', 'maclean.cubs'),
-            'Boswell': ('boswell', 'boswell.scouts'),
-            'Johnson': ('johnson', 'johnson.scouts'),
-            'Adults': ('adults', 'adults.group')}
+from owncloud_accounts import ACCOUNTS
 
 
 def _main(sections, vcard_dir):

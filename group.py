@@ -16,15 +16,19 @@ class Member(osm.Member):
 
 osm.MemberClass = Member
 
+
 class Group(object):
-    
+
     SECTIONIDS = {'Adult': '18305',
                   'Paget': '9960',
                   'Brown': '17326',
                   'Maclean': '14324',
                   'Rowallan': '12700',
                   'Boswell': '10363',
-                  'Johnson': '5882'}
+                  'Johnson': '5882',
+                  'Garrick': '20711',
+                  'Erasmus': '20707',
+                  'Somers': '20706'}
                    #'Waiting List': ""}
 
     ADULT_SECTION = 'Adult'
@@ -34,15 +38,26 @@ class Group(object):
                    'Maclean',
                    'Rowallan',
                    'Boswell',
-                   'Johnson']
+                   'Johnson',
+                   'Garrick',
+                   'Erasmus',
+                   'Somers']
 
-    def __init__(self, osm, auth, important_fields):
+    def __init__(self, osm, auth, important_fields, term=None):
         self._osm = osm
         self._important_fields = important_fields
-        self._sections = self._osm.OSM(auth, self.SECTIONIDS.values())
+        self._sections = self._osm.OSM(auth, self.SECTIONIDS.values(), 
+                                       term)
 
     def section_all_members(self, section):
-        return self._sections.sections[self.SECTIONIDS[section]].members.values()
+        # If there a no members the 'members' will be an empty list
+        # rather than an empty dict so we trap this an return an empty
+        # list.
+        try:
+            return self._sections.sections[
+                self.SECTIONIDS[section]].members.values()
+        except AttributeError:
+            return []
 
     def all_adult_members(self):
         return self.section_all_members('Adult')
@@ -67,6 +82,10 @@ class Group(object):
         return {s: self.section_all_members(s) for
                 s in self.YP_SECTIONS}
 
+    def all_yp_members_without_leaders_dict(self):
+        return {s: self.section_yp_members_without_leaders(s) for
+                s in self.YP_SECTIONS}
+
     def all_yp_members_without_senior_duplicates_dict(self):
         return {'Paget': self.remove_senior_duplicates('Paget',
                                                        self.all_cubs()),
@@ -76,12 +95,17 @@ class Group(object):
                                                          self.all_scouts()),
                 'Rowallan': self.remove_senior_duplicates('Rowallan',
                                                           self.all_scouts()),
+                'Garrick': self.remove_senior_duplicates('Garrick',
+                                                         self.all_scouts()),
+                'Somers': self.remove_senior_duplicates('Somers',
+                                                        self.all_scouts()),
+                'Erasmus': self.section_yp_members_without_leaders('Erasmus'),
                 'Boswell': self.section_yp_members_without_leaders('Boswell'),
                 'Johnson': self.section_yp_members_without_leaders('Johnson')}
 
         return {s: self.section_all_members(s) for
                 s in self.YP_SECTIONS}
-    
+                                                    
     def section_missing_references(self, section_name):
         return self._section_missing_references(section_name)
 
@@ -115,15 +139,18 @@ class Group(object):
 
     def all_beavers(self):
         return self.section_yp_members_without_leaders('Paget') +\
-            self.section_yp_members_without_leaders('Brown')
+            self.section_yp_members_without_leaders('Brown') +\
+            self.section_yp_members_without_leaders('Garrick')
 
     def all_cubs(self):
         return self.section_yp_members_without_leaders('Rowallan') +\
-            self.section_yp_members_without_leaders('Maclean')
+            self.section_yp_members_without_leaders('Maclean') + \
+            self.section_yp_members_without_leaders('Somers')
 
     def all_scouts(self):
         return self.section_yp_members_without_leaders('Johnson') +\
-            self.section_yp_members_without_leaders('Boswell')
+            self.section_yp_members_without_leaders('Boswell') +\
+            self.section_yp_members_without_leaders('Erasmus')
         
     def find_ref_in_sections(self, reference):
         """Search for a reference in all of the sections.
@@ -146,6 +173,12 @@ class Group(object):
     def remove_senior_duplicates(self, section, senior_members):
         kept_members = []
         for member in self.section_yp_members_without_leaders(section):
+            if member[OSM_REF_FIELD] == "":
+                # If no Personal Reference is set, do not look for
+                # duplicates
+                kept_members.append(member)
+                continue
+
             matching_senior_members = [senior_member for senior_member
                                        in senior_members
                                        if senior_member[OSM_REF_FIELD] ==
@@ -180,7 +213,6 @@ class Group(object):
         return [m for m in self.section_yp_members_without_leaders(section)
                 if m['Sex'].lower() == 'm' or m['Sex'].lower() == 'male']
 
-
     def census(self):
         """Return the information required for the anual census."""
 
@@ -201,36 +233,42 @@ class Group(object):
             r['Beavers']['F'][i] = len(
                 [m for m in
                  self.girls_in_section('Brown') +
-                 self.girls_in_section('Paget')
+                 self.girls_in_section('Paget') +
+                 self.girls_in_section('Garrick')
                  if int(m.age().days / 365) == i])
             r['Beavers']['M'][i] = len(
                 [m for m in
                  self.boys_in_section('Brown') +
-                 self.boys_in_section('Paget')
+                 self.boys_in_section('Paget') +
+                 self.boys_in_section('Garrick')
                  if int(m.age().days / 365) == i])
 
         for i in range(7, 11):
             r['Cubs']['F'][i] = len(
                 [m for m in
                  self.girls_in_section('Maclean') +
-                 self.girls_in_section('Rowallan')
+                 self.girls_in_section('Rowallan') +
+                 self.girls_in_section('Somers')
                  if int(m.age().days / 365) == i])
             r['Cubs']['M'][i] = len(
                 [m for m in
                  self.boys_in_section('Maclean') +
-                 self.boys_in_section('Rowallan')
+                 self.boys_in_section('Rowallan') +
+                 self.boys_in_section('Somers')
                  if int(m.age().days / 365) == i])
 
         for i in range(10, 16):
             r['Scouts']['F'][i] = len(
                 [m for m in
                  self.girls_in_section('Johnson') +
-                 self.girls_in_section('Boswell')
+                 self.girls_in_section('Boswell') +
+                 self.girls_in_section('Erasmus')
                  if int(m.age().days / 365) == i])
             r['Scouts']['M'][i] = len(
                 [m for m in
                  self.boys_in_section('Johnson') +
-                 self.boys_in_section('Boswell')
+                 self.boys_in_section('Boswell') +
+                 self.boys_in_section('Erasmus')
                  if int(m.age().days / 365) == i])
 
         return r
