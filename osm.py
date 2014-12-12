@@ -175,6 +175,11 @@ class Accessor(object):
         
           try:
             result = urllib.request.urlopen(req).readall().decode('utf-8')
+          except urllib.error.HTTPError as err:
+              if str(err) != 'HTTP Error 500: No permissions':
+                  # We don't want to winge about permissions errors here.
+                  log.error("urlopen failed: {0}, {1}".format(url, data.encode('utf-8')))
+              raise
           except:
             log.error("urlopen failed: {0}, {1}".format(url, data.encode('utf-8')))
             raise
@@ -246,16 +251,21 @@ class Term(OSMObject):
                                                   '%Y-%m-%d')
 
     def is_active(self):
-        now = datetime.datetime.now()
-        return (self.startdate < now) and (self.enddate > now)
+        now = datetime.datetime.now().date()
+        return (self.startdate.date() <= now) and (self.enddate.date() >= now)
 
+    def __repr__(self):
+        return "{}: {} - {} {}".format(self['name'],
+                                       self.startdate,
+                                       self.enddate,
+                                       datetime.datetime.now())
 
 class Badge(OSMObject):
     def __init__(self, osm, accessor, section, badge_type, details, structure):
         self._section = section
         self._badge_type = badge_type
         self.name = details['name']
-        self.table = details['table']
+        #self.table = details['table']
 
         activities = {}
         if len(structure) > 1:
@@ -287,7 +297,7 @@ class Badges(OSMObject):
         self._badge_type = badge_type
         self._order = record['badgeOrder']
         self._details = record['details']
-        self._stock = record['stock']
+        #self._stock = record['stock']
         self._structure = record['structure']
 
         badges = {}
@@ -533,10 +543,20 @@ class Programme(OSMObject):
         self._accessor = accessor
 
         events = {}
-        for event in record['items']:
-            events["{} - {}".format(
-                event['title'],
-                event['meetingdate'])] = Event(osm, section, accessor, event)
+
+        if record != []:
+            # If the record is an empty list it means that the programme
+            # is empty.            
+            try:
+                for event in record['items']:
+                    events["{} - {}".format(
+                        event['title'],
+                        event['meetingdate'])] = Event(osm, section, accessor, event)
+            except:
+                log.warn("Failed to process events in programme for section: {0}\n"
+                         "record = {1}\n error = {2}".format(section['sectionname'],
+                                                             repr(record),
+                                                             sys.exc_info()[0]))
 
         OSMObject.__init__(self, osm, accessor, events)
 
@@ -548,7 +568,7 @@ class Programme(OSMObject):
     
 
 class Section(OSMObject):
-    def __init__(self, osm, accessor, record, init=True):
+    def __init__(self, osm, accessor, record, init=True, term=None):
         OSMObject.__init__(self, osm, accessor, record)
 
         try:
@@ -557,20 +577,40 @@ class Section(OSMObject):
             log.debug("No extra member columns.")
             self._member_column_map = {}
 
+        self.requested_term = term
+
         if init:
           self.init()
 
     def init(self):
-        self.terms = [term for term in self._osm.terms(self['sectionid'])
-                      if term.is_active()]
+        log.debug("Requested term = {}".format(self.requested_term))
+        if self.requested_term is not None:
+            # We have requested a specific term.
+            self.terms = [term for term in self._osm.terms(self['sectionid'])
+                          if term['name'] == self.requested_term]
 
-        if len(self.terms) > 1:
-            log.warn("{!r}: More than 1 term is active, picking "
-                     "last in list {!r}".format(
-                         self['sectionname'],
-                         [(term['name'], term['past']) for
-                          term in self.terms]))
-            sys.exit(0)
+            if len(self.terms) != 1:
+                log.error("Requested term ({}) is not in available terms ({})".format(
+                        self.requested_term,
+                        ",".join([term['name'] for term in self.terms])))
+                sys.exit(1)
+
+        else:
+            self.terms = [term for term in self._osm.terms(self['sectionid'])]
+            log.debug("All terms = {!r}".format(self.terms))
+
+            self.terms = [term for term in self._osm.terms(self['sectionid'])
+                          if term.is_active()]
+
+            log.debug("Active terms = {!r}".format(self.terms))
+
+            if len(self.terms) > 1:
+                log.error("{!r}: More than 1 term is active, picking "
+                          "last in list {!r}".format(
+                        self['sectionname'],
+                        [(term['name'], term['past']) for
+                         term in self.terms]))
+                sys.exit(1)
 
         if len(self.terms) == 0:
             # If there is no active term it does make sense to gather
@@ -586,7 +626,8 @@ class Section(OSMObject):
             self.activity = self._get_badges('activity')
             self.staged = self._get_badges('staged')
             self.core = self._get_badges('core')
-        
+ 
+        log.debug("Configured term = {}".format(self.term))
         try:
             self.members = self._get_members()
         except:
@@ -596,6 +637,11 @@ class Section(OSMObject):
 
         try:
             self.programme = self._get_programme()
+        except urllib.error.HTTPError as err:
+            log.warn("Failed to get programme for section {0}: {1}"
+                     .format(self['sectionname'],
+                             err))
+            self.programme = []
         except:
             log.warn("Failed to get programme for section {0}"
                      .format(self['sectionname']),
@@ -648,20 +694,20 @@ class Section(OSMObject):
 
 
 class OSM(object):
-    def __init__(self, authorisor, sectionid_list=False):
+    def __init__(self, authorisor, sectionid_list=False, term=None):
         self._accessor = Accessor(authorisor)
 
         self.sections = {}
         self.section = None
 
-        self.init(sectionid_list)
+        self.init(sectionid_list, term)
 
-    def init(self, sectionid_list=False):
+    def init(self, sectionid_list=False, term=None):
         roles = self._accessor('api.php?action=getUserRoles')
 
         self.sections = {}
 
-        for section in [Section(self, self._accessor, role, init=False)
+        for section in [Section(self, self._accessor, role, init=False, term=term)
                         for role in roles
                         if 'section' in role]:
             if sectionid_list is False or \
@@ -676,8 +722,15 @@ class OSM(object):
                         self.section.term['name']))
 
         if self.section is None:
-            self.section = self.sections[-1]
+            self.section = list(self.sections.values())[-1]
 
+        # Warn if the active term is different for any of the 
+        # selected selections.
+
+        if len(set([section.term['name'] for section in self.sections.values()])) != 1:
+            log.warn("Not all sections have the same active term: {}".format(
+                    "\n".join(["{} - {}".format(
+                                section['sectionname'], section.term['name']) for section in self.sections.values()])))
     def terms(self, sectionid):
         terms = self._accessor('api.php?action=getTerms')
         if sectionid in terms:
