@@ -1,2 +1,4 @@
 gspread
 docopt
+pyvirtualdisplay
+splinter
