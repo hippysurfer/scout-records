@@ -1,35 +1,171 @@
 # coding: utf-8
+"""Online Scout Manager Interface.
+
+Usage:
+  export_compass.py [-d] <user> <password> <outdir> <section>... 
+  export_compass.py (-h | --help)
+  export_compass.py --version
+
+
+Options:
+  <user>         Username
+  <password>     Password
+  <section>      Section to export.
+  <outdir>       Output directory for cvs files.
+  -d,--debug     Turn on debug output.
+  -h,--help      Show this screen.
+  --version      Show version.
+
+"""
+
+from docopt import docopt
+import os.path
+import logging
+import time
+
 from splinter  import Browser
-import os
+
+log = logging.getLogger(__name__)
 
 
-prefs = {"browser.download.folderList": 2,
+class Compass:
+
+    def __init__(self, username, password, outdir):
+        self._username = username
+        self._password = password
+        self._outdir = outdir
+        self._browser = None
+
+    def quit(self):
+        if self._browser:
+            self._browser.quit()
+            self._browser = None
+
+    def loggin(self):
+        prefs = {
+            "browser.download.folderList": 2,
             "browser.download.manager.showWhenStarting": False,
-            "browser.download.dir": os.getcwd(),
-            "browser.helperApps.neverAsk.saveToDisk": "application/octet-stream"}
+            "browser.download.dir": self._outdir,
+            "browser.helperApps.neverAsk.saveToDisk": "application/octet-stream,application/msexcel,application/csv"}
 
-#browser = Browser('firefox', profile_preferences=prefs)
-browser = Browser('phantomjs')
+        self._browser = Browser('firefox', profile_preferences=prefs)
 
-browser.visit('https://compass.scouts.org.uk/login/User/Login')
-browser.fill('EM', '')
-browser.fill('PW', '')
-browser.find_by_value('Submit').first.click()
+        self._browser.visit('https://compass.scouts.org.uk/login/User/Login')
 
-browser.is_element_present_by_name('ctl00$UserTitleMenu$cboUCRoles', wait_time=30)
-browser.select('ctl00$UserTitleMenu$cboUCRoles','1253644')
+        self._browser.fill('EM', self._username)
+        self._browser.fill('PW', self._password)
+        time.sleep(2)
+        self._browser.find_by_value('Submit').first.click()
 
-browser.is_text_present('My Scouting', wait_time=30)
-browser.click_link_by_text('My Scouting')
+        # Look for the Role selection menu and select my Group Admin role.
+        self._browser.is_element_present_by_name(
+            'ctl00$UserTitleMenu$cboUCRoles',
+            wait_time=30)
+        self._browser.select('ctl00$UserTitleMenu$cboUCRoles', '1253644')
 
-def wait_then_click_xpath(xpath, wait_time=30):
-    browser.is_element_present_by_xpath(xpath, wait_time=wait_time)
-    browser.find_by_xpath(xpath).click()
-    
-wait_then_click_xpath('//*[@id="TR_HIER7"]/h2')
-wait_then_click_xpath('//*[@id="TR_HIER7_TBL"]/tbody/tr[7]/td[4]/a')
-wait_then_click_xpath('//*[@id="bnExport"]')
-wait_then_click_xpath('//*[@id="tbl_hdv"]/div/table/tbody/tr[2]/td[2]/input')
-wait_then_click_xpath('//*[@id="bnOK"]')
-wait_then_click_xpath('//*[@id="bnAlertOK"]')
+    def export(self, section):
+        # Select the My Scouting link.
+        self._browser.is_text_present('My Scouting', wait_time=30)
+        self._browser.click_link_by_text('My Scouting')
 
+        def wait_then_click_xpath(xpath, wait_time=30):
+            self._browser.is_element_present_by_xpath(
+                xpath, wait_time=wait_time)
+            self._browser.find_by_xpath(xpath).click()
+
+        # Click the "Group Sections" hotspot.
+        wait_then_click_xpath('//*[@id="TR_HIER7"]/h2')
+
+        # Clink the link that shows the number of members in the section.
+        # This is the one bit that is section specific.
+        # We might be able to match on the Section name in the list,
+        # which would make it more robust but at present we just hard
+        # the location in the list.
+        section_map = {
+            'garrick': 2,
+            'paget': 3,
+            'swinfen': 4,
+            'brown': 4,
+            'maclean': 5,
+            'rowallan': 6,
+            'somers': 7,
+            'boswell': 8,
+            'erasmus': 9,
+            'johnson': 10
+        }
+        wait_then_click_xpath(
+            '//*[@id="TR_HIER7_TBL"]/tbody/tr[{}]/td[4]/a'.format(
+                section_map[section.lower()]
+            ))
+
+        # Click on the Export button.
+        wait_then_click_xpath('//*[@id="bnExport"]')
+
+        # Click to say that we want a CSV output.
+        wait_then_click_xpath(
+            '//*[@id="tbl_hdv"]/div/table/tbody/tr[2]/td[2]/input')
+        time.sleep(2)
+
+        # Click to say that we want all fields.
+        wait_then_click_xpath('//*[@id="bnOK"]')
+
+        download_path = os.path.join(self._outdir, 'CompassExport.csv')
+
+        if os.path.exists(download_path):
+            log.warn("Removing stale download file.")
+            os.remove(download_path)
+
+        # Click the warning.
+        wait_then_click_xpath('//*[@id="bnAlertOK"]')
+
+        # Browser will now download the csv file into outdir. It will be called
+        # CompassExport.
+
+        # Wait for file.
+        timeout = 30
+        while not os.path.exists(download_path):
+            time.sleep(1)
+            timeout -= 1
+            if timeout <= 0:
+                log.warn("Timeout waiting for {} export to download.".fomat(
+                    section
+                ))
+                break
+
+        # rename download file.
+        os.rename(download_path,
+                  os.path.join(self._outdir, '{}.csv'.format(section)))
+
+        log.info("Completed download for {}.".format(section))
+
+        # Draw breath
+        time.sleep(1)
+
+
+def _main(username, password, sections, outdir):
+
+    compass = Compass(username, password, outdir)
+    compass.loggin()
+
+    try:
+        for section in sections:
+            compass.export(section)
+    finally:
+        compass.quit()
+
+if __name__ == '__main__':
+
+    args = docopt(__doc__, version='OSM 2.0')
+
+    if args['--debug']:
+        level = logging.DEBUG
+    else:
+        level = logging.INFO
+
+    logging.basicConfig(level=level)
+    log.debug("Debug On\n")
+
+    log.debug(args['<section>'])
+
+    _main(args['<user>'], args['<password>'],
+          args['<section>'], os.path.abspath(args['<outdir>']))
