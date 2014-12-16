@@ -23,6 +23,7 @@ import os.path
 import logging
 import time
 
+from pyvirtualdisplay import Display
 from splinter  import Browser
 
 log = logging.getLogger(__name__)
@@ -144,14 +145,22 @@ class Compass:
 
 def _main(username, password, sections, outdir):
 
-    compass = Compass(username, password, outdir)
-    compass.loggin()
+    display = Display(visible=0, size=(1920, 1080))
 
     try:
-        for section in sections:
-            compass.export(section)
+        display.start()
+
+        compass = Compass(username, password, outdir)
+        compass.loggin()
+
+        try:
+            for section in sections:
+                compass.export(section)
+        finally:
+            compass.quit()
+
     finally:
-        compass.quit()
+        display.stop()
 
 if __name__ == '__main__':
 
