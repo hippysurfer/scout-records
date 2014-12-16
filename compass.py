@@ -22,16 +22,17 @@ from docopt import docopt
 import os.path
 import logging
 import time
+import csv
 
 from pyvirtualdisplay import Display
-from splinter  import Browser
+from splinter import Browser
 
 log = logging.getLogger(__name__)
 
 
 class Compass:
 
-    def __init__(self, username, password, outdir):
+    def __init__(self, username='', password='', outdir=''):
         self._username = username
         self._password = password
         self._outdir = outdir
@@ -141,6 +142,42 @@ class Compass:
 
         # Draw breath
         time.sleep(1)
+
+    def load_from_dir(self):
+        # Load the records form the set of files in self._outdir.
+
+        self._records_by_section = {}
+        for section in os.listdir(self._outdir):
+            section_name = os.path.splitext(section)[0]
+
+            reader = csv.DictReader(open(
+                os.path.join(self._outdir, section)))
+
+            self._records_by_section[section_name] = list(reader)
+
+    def find_by_name(self, firstname, lastname, section_wanted=None):
+        """Return list of matching records."""
+        l = []
+        for section in self._records_by_section.keys():
+            if (section_wanted and section_wanted != section):
+                continue
+            for r in self._records_by_section[section]:
+                if (r['forenames'].strip().lower() == firstname.strip().lower() and
+                        r['surname'].strip().lower() == lastname.strip().lower()):
+                    l.append(r)
+
+        return l
+
+    def sections(self):
+        "Return a list of the sections for which we have data."
+        return self._records_by_section.keys()
+
+    def all_yp_members_dict(self):
+        """Return a dict of sections."""
+        return self._records_by_section
+
+    def section_yp_members_without_leaders(self, section):
+        return self.all_yp_members_dict()[section]
 
 
 def _main(username, password, sections, outdir):

@@ -36,6 +36,7 @@ from update import MAPPING, OSM_REF_FIELD
 import finance
 import gspread
 import creds
+import compass
 
 PERSONAL_REFERENCE_RE = re.compile('^[A-Z0-9]{4}-[A-Z]{2}-\d{6}$')
 
@@ -327,6 +328,91 @@ def process_finance_spreadsheet(r, group, quarter):
     r.t_end()
 
 
+def section_compass_check(r, group, section):
+    """Check the content of Compass for descrepencies with OSM
+    for a specific section."""
+
+    c = compass.Compass(outdir='outdir')
+    c.load_from_dir()
+
+    osm_members = group.section_yp_members_without_leaders(section)
+
+    r.sub_title('Compass')
+    r.p('The following records appear in OSM but do not appear in Compass')
+
+    if section not in c.sections():
+        r.p('No Compass data available for Section: {}'.format(section))
+        return
+
+    r.t_start(['Membership', 'Firstname', 'Surname'])
+
+    # Find YP missing from Compass
+    for member in osm_members:
+        if not c.find_by_name(member['firstname'],
+                              member['lastname'],
+                              section_wanted=section):
+            r.t_row([member['Membership'],
+                     member['firstname'],
+                     member['lastname']])
+    r.t_end()
+
+    r.p('The following records appear in Compass but do not appear in OSM')
+
+    r.t_start(['Membership', 'Firstname', 'Surname'])
+
+    compass_members = c.section_yp_members_without_leaders(section)
+    for member in compass_members:
+        if not group.find_by_name(member['forenames'],
+                                  member['surname'],
+                                  section_wanted=section):
+            r.t_row([member['membership_number'],
+                     member['forenames'],
+                     member['surname']])
+
+    r.t_end()
+
+
+def process_compass(r, group):
+    "Check the content of Compass for descrepencies with OSM"
+
+    c = compass.Compass(outdir='outdir')
+    c.load_from_dir()
+
+    all_yp = group.all_yp_members_without_senior_duplicates_dict()
+
+    r.sub_title('Compass')
+    r.p('The following records appear in OSM but do not appear in Compass')
+
+    r.t_start(['OSM Section', 'Membership', 'Firstname', 'Surname'])
+
+    # Find YP missing from Compass
+    for section in all_yp.keys():
+        for member in all_yp[section]:
+            if not c.find_by_name(member['firstname'],
+                                  member['lastname']):
+                r.t_row([section,
+                         member['Membership'],
+                         member['firstname'],
+                         member['lastname']])
+    r.t_end()
+
+    r.p('The following records appear in Compass but do not appear in OSM')
+
+    r.t_start(['Compass Section', 'Membership', 'Firstname', 'Surname'])
+
+    compass_sections = c.all_yp_members_dict()
+    for section in compass_sections.keys():
+        for member in compass_sections[section]:
+            if not group.find_by_name(member['forenames'],
+                                      member['surname']):
+                r.t_row([section,
+                         member['membership_number'],
+                         member['forenames'],
+                         member['surname']])
+
+    r.t_end()
+
+
 def census(r, group):
     census = group.census()
 
@@ -356,16 +442,17 @@ def census(r, group):
 
 COMMON = [intro,
           check_bad_data]
+NOT_ADULT = [section_compass_check, ]
 
-elements = {'Maclean': COMMON,
-            'Rowallan': COMMON,
-            'Garrick': COMMON,
-            'Somers': COMMON,
-            'Erasmus': COMMON,
-            'Brown': COMMON,
-            'Boswell': COMMON,
-            'Johnson': COMMON,
-            'Paget': COMMON,
+elements = {'Maclean': COMMON + NOT_ADULT,
+            'Rowallan': COMMON + NOT_ADULT,
+            'Garrick': COMMON + NOT_ADULT,
+            'Somers': COMMON + NOT_ADULT,
+            'Erasmus': COMMON + NOT_ADULT,
+            'Brown': COMMON + NOT_ADULT,
+            'Boswell': COMMON + NOT_ADULT,
+            'Johnson': COMMON + NOT_ADULT,
+            'Paget': COMMON + NOT_ADULT,
             'Adult': COMMON}
 
 
@@ -391,7 +478,9 @@ def group_report(r, group, quarter, term):
 
     r.t_end()
 
-    process_finance_spreadsheet(r, group, quarter)
+    process_compass(r, group)
+
+    #process_finance_spreadsheet(r, group, quarter)
 
     for section in elements.keys():
         for element in elements[section]:

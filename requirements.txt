@@ -2,3 +2,4 @@ gspread
 docopt
 pyvirtualdisplay
 splinter
+dateutils

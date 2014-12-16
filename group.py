@@ -166,6 +166,19 @@ class Group(object):
 
         return matching_sections
 
+    def find_by_name(self, firstname, lastname, section_wanted=None):
+        """Return a list of records with matching names"""
+        l = []
+        sections = self.all_yp_members_dict()
+        for section in sections.keys():
+            if (section_wanted and section_wanted != section):
+                continue
+            for member in sections[section]:
+                if (member['firstname'].lower().strip() == firstname.lower().strip() and
+                    member['lastname'].lower().strip() == lastname.lower().strip()):
+                    l.append(member)
+        return l
+
     # For each section we need to look at whether a member appears in a
     # senior section too (they will if they are in the process of
     # moving). If they are in a senior section we want to favour the
