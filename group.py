@@ -113,14 +113,14 @@ class Group(object):
         return [member for member in
                 self.section_all_members(section)
                 if not member['patrol'].lower() in
-                ['leaders', 'young leaders']]
+                ['leaders', 'young leaders', 'winter adv.']]
 
     def section_leaders_in_yp_section(self, section):
         return [member for member in
                 self.section_all_members(
                     section)
                 if member['patrol'].lower() in
-                ['leaders', 'young leaders']]
+                ['leaders', 'young leaders', 'winter adv.']]
 
     def all_leaders_in_yp_sections(self):
         # Make a list of all the leaders
