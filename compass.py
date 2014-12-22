@@ -25,6 +25,7 @@ import time
 import csv
 import datetime
 import re
+import pandas as pd
 
 from pyvirtualdisplay import Display
 from splinter import Browser
@@ -339,7 +340,9 @@ class Compass:
         self._username = username
         self._password = password
         self._outdir = outdir
+
         self._browser = None
+        self._record = None
 
     def quit(self):
         if self._browser:
@@ -451,47 +454,53 @@ class Compass:
 
         log.debug('Loading from {}'.format(self._outdir))
 
-        self._records_by_section = {}
-        for section in os.listdir(self._outdir):
-            section_name = os.path.splitext(section)[0]
+        def get_section(path, section):
+            df = pd.read_csv(path, dtype=object, sep=',')
+            df['section'] = section
+            df['forenames_l'] = [_.lower().strip() for _ in df['forenames']]
+            df['surname_l'] = [_.lower().strip() for _ in df['surname']]
+            return df
 
-            log.debug('Loading Compass data for {}'.format(section_name))
-            reader = csv.DictReader(open(
-                os.path.join(self._outdir, section)))
-
-            self._records_by_section[section_name] = list(reader)
+        self._records = pd.DataFrame().append(
+            [get_section(os.path.join(self._outdir, section),
+                         os.path.splitext(section)[0])
+             for section in os.listdir(self._outdir)], ignore_index=True)
 
     def find_by_name(self, firstname, lastname, section_wanted=None):
         """Return list of matching records."""
-        l = []
-        for section in self._records_by_section.keys():
-            if (section_wanted and section_wanted != section):
-                continue
-            for r in self._records_by_section[section]:
-                if (r['forenames'].strip().lower() ==
-                    firstname.strip().lower() and
-                        r['surname'].strip().lower() ==
-                        lastname.strip().lower()):
-                    l.append(r)
 
-        return l
+        recs = self._records
+
+        df = recs[(recs.forenames_l == firstname.lower().strip()) &
+                  (recs.surname_l == lastname.lower().strip())]
+
+        if section_wanted is not None:
+            df = df[(df['section'] == section_wanted)]
+
+        return [r for i, r in df.iterrows()]
 
     def sections(self):
         "Return a list of the sections for which we have data."
-        return self._records_by_section.keys()
+        return self._records['section'].unique()
 
     def all_yp_members_dict(self):
-        return {s: self.section_all_members(s) for
-                s in self.sections()}
+        return {s: members for s, members in self._records.groupby('section')}
 
     def section_all_members(self, section):
-        return self._records_by_section[section]
+        return [m for i, m in self._records[
+            self._records['section'] == section].iterrows()]
 
     def section_yp_members_without_leaders(self, section):
-        return [member for member in
-                self.section_all_members(section)
-                if member['role'].lower() in
-                ['Beaver Scout', 'Cub Scout', 'Scout']]
+        return [m for i, m in self._records[
+            (self._records['section'] == section) &
+            (self._records['role'].isin(
+                ['Beaver Scout', 'Cub Scout', 'Scout']))].iterrows()]
+
+    def members_with_multiple_membership_numbers(self):
+        return [member for s, member in self._records.groupby(
+            ['forenames', 'surname']).filter(
+                lambda x: len(x['membership_number'].unique()) > 1).groupby(
+                    ['forenames', 'surname', 'membership_number'])]
 
 
 def _main(username, password, sections, outdir):

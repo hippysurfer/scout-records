@@ -409,7 +409,7 @@ def process_compass(r, group):
 
     compass_sections = c.all_yp_members_dict()
     for section in compass_sections.keys():
-        for member in compass_sections[section]:
+        for i, member in compass_sections[section].iterrows():
             if not group.find_by_name(member['forenames'],
                                       member['surname']):
                 r.t_row([section,
