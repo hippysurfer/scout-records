@@ -27,6 +27,7 @@ import socket
 import re
 import sys
 import datetime
+import os.path
 
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -332,7 +333,7 @@ def section_compass_check(r, group, section):
     """Check the content of Compass for descrepencies with OSM
     for a specific section."""
 
-    c = compass.Compass(outdir='outdir')
+    c = compass.Compass(outdir=os.path.abspath('compass_exports'))
     c.load_from_dir()
 
     osm_members = group.section_yp_members_without_leaders(section)
@@ -375,7 +376,7 @@ def section_compass_check(r, group, section):
 def process_compass(r, group):
     "Check the content of Compass for descrepencies with OSM"
 
-    c = compass.Compass(outdir='outdir')
+    c = compass.Compass(outdir=os.path.abspath('compass_exports'))
     c.load_from_dir()
 
     all_yp = group.all_yp_members_without_senior_duplicates_dict()

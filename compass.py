@@ -146,10 +146,13 @@ class Compass:
     def load_from_dir(self):
         # Load the records form the set of files in self._outdir.
 
+        log.debug('Loading from {}'.format(self._outdir))
+
         self._records_by_section = {}
         for section in os.listdir(self._outdir):
             section_name = os.path.splitext(section)[0]
-
+            
+            log.debug('Loading Compass data for {}'.format(section_name))
             reader = csv.DictReader(open(
                 os.path.join(self._outdir, section)))
 
@@ -173,11 +176,17 @@ class Compass:
         return self._records_by_section.keys()
 
     def all_yp_members_dict(self):
-        """Return a dict of sections."""
-        return self._records_by_section
+        return {s: self.section_all_members(s) for
+                s in self.sections()}
+
+    def section_all_members(self, section):
+        return self._records_by_section[section]
 
     def section_yp_members_without_leaders(self, section):
-        return self.all_yp_members_dict()[section]
+        return [member for member in
+                self.section_all_members(section)
+                if member['role'].lower() in
+                ['Beaver Scout', 'Cub Scout', 'Scout']]
 
 
 def _main(username, password, sections, outdir):
