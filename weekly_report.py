@@ -29,6 +29,7 @@ import re
 import sys
 import datetime
 import os.path
+import itertools
 
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -347,10 +348,10 @@ def section_compass_check(r, group, section):
         return
 
     members_missing_in_compass = [member for member in osm_members
-                                  if not c.find_by_name(
+                                  if c.find_by_name(
                                       member['firstname'],
                                       member['lastname'],
-                                      section_wanted=section)]
+                                      section_wanted=section).empty]
 
     if len(members_missing_in_compass):
         r.t_start(compass.required_headings)
@@ -390,18 +391,24 @@ def process_compass(r, group):
     r.sub_title('Compass')
     r.p('The following records appear in OSM but do not appear in Compass')
 
-    r.t_start(['OSM Section', 'Membership', 'Firstname', 'Surname'])
+    # Generate a dict of the sections with missing members.
+    members_missing_in_compass = {
+        s: [member for member in all_yp[s]
+            if c.find_by_name(
+                member['firstname'],
+                member['lastname']).empty]
+        for s in all_yp.keys()}
 
-    # Find YP missing from Compass
-    for section in all_yp.keys():
-        for member in all_yp[section]:
-            if not c.find_by_name(member['firstname'],
-                                  member['lastname']):
-                r.t_row([section,
-                         member['Membership'],
-                         member['firstname'],
-                         member['lastname']])
-    r.t_end()
+    # If the dict is not empty.
+    if list(itertools.chain(*members_missing_in_compass.values())):
+        r.t_start(['OSM section', ] + list(compass.required_headings))
+
+        for section, members in members_missing_in_compass.items():
+            for member in members:
+                compass_record = compass.member2compass(member, section)
+                r.t_row([section, ] + [compass_record[k]
+                                       for k in compass.required_headings])
+        r.t_end()
 
     r.p('The following records appear in Compass but do not appear in OSM')
 
@@ -417,6 +424,17 @@ def process_compass(r, group):
                          member['forenames'],
                          member['surname']])
 
+    r.t_end()
+
+    r.p('The following records appear more than once in Compass with different Membership numbers')
+
+    r.t_start(['Membership', 'Firstname', 'Surname', 'Location'])
+
+    for member in c.members_with_multiple_membership_numbers():
+        r.t_row([member['membership_number'].values[0],
+                 member['forenames'].values[0],
+                 member['surname'].values[0],
+                 member['location'].values[0]])
     r.t_end()
 
 

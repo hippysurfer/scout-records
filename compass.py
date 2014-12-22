@@ -477,7 +477,7 @@ class Compass:
         if section_wanted is not None:
             df = df[(df['section'] == section_wanted)]
 
-        return [r for i, r in df.iterrows()]
+        return df
 
     def sections(self):
         "Return a list of the sections for which we have data."
