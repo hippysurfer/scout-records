@@ -2,7 +2,7 @@
 """Online Scout Manager Interface.
 
 Usage:
-  weekly_report.py [-d | --debug] [-n | --no_email] [--email=<email>] [--quarter=<quarter>] [--term=<term>] <apiid> <token> <section>...
+  weekly_report.py [-d | --debug] [-n | --no_email] [--email=<email>] [-w | --web] [--quarter=<quarter>] [--term=<term>] <apiid> <token> <section>...
   weekly_report.py (-h | --help)
   weekly_report.py --version
 
@@ -11,6 +11,7 @@ Options:
   <section>      Section to export.
   -d,--debug     Turn on debug output.
   -n,--no_email  Do not send email.
+  -w,--web       Serve report on local web server.
   --email=<email> Send to only this email address.
   --quarter=<quarter> Which quarter to use [default: current].
   --term=<term>  Which OSM term to use [default: current].
@@ -47,7 +48,7 @@ TO = {'Group': ['hippysurfer@gmail.com',
                 'adrian.grew@tesco.net'],
       'Maclean': ['maclean@7thlichfield.org.uk'],
       'Somers': ['somers@7thlichfield.org.uk'],
-      'Brown': ['pten2106@yahoo.co.uk'],
+      'Swinfen': ['pten2106@yahoo.co.uk'],
       'Garrick': ['caroline_fellows@hotmail.com'],
       'Paget': ['riddleshome@gmail.com'],
       'Rowallan': ['markjoint@hotmail.co.uk'],
@@ -150,7 +151,7 @@ def intro(r, group, section):
 
 def check_bad_data(r, group, section):
     MIN_AGE = {
-        'Brown': 5,
+        'Swinfen': 5,
         'Paget': 5,
         'Garrick': 5,
         'Maclean': 7,
@@ -162,7 +163,7 @@ def check_bad_data(r, group, section):
     }
 
     MAX_AGE = {
-        'Brown': 8,
+        'Swinfen': 8,
         'Paget': 8,
         'Garrick': 8,
         'Maclean': 10,
@@ -288,7 +289,7 @@ def process_finance_spreadsheet(r, group, quarter):
     section_map = {'Maclean': 'MP',
                    'Rowallan': 'RP',
                    'Somers': 'SP',
-                   'Brown': 'BC',
+                   'Swinfen': 'BC',
                    'Garrick': 'GC',
                    'Boswell': 'BT',
                    'Johnson': 'JT',
@@ -305,7 +306,7 @@ def process_finance_spreadsheet(r, group, quarter):
             if member[OSM_REF_FIELD] in fin_references:
                 try:
                     previous_section = q4_section[fin_references.index(
-                            member[OSM_REF_FIELD])]
+                        member[OSM_REF_FIELD])]
                 except IndexError:
                     # If the spreadsheet does not have enough columns we assume that
                     # the previous section was None: i.e. this is a new YP.
@@ -345,32 +346,37 @@ def section_compass_check(r, group, section):
         r.p('No Compass data available for Section: {}'.format(section))
         return
 
-    r.t_start(['Membership', 'Firstname', 'Surname'])
+    members_missing_in_compass = [member for member in osm_members
+                                  if not c.find_by_name(
+                                      member['firstname'],
+                                      member['lastname'],
+                                      section_wanted=section)]
 
-    # Find YP missing from Compass
-    for member in osm_members:
-        if not c.find_by_name(member['firstname'],
-                              member['lastname'],
-                              section_wanted=section):
-            r.t_row([member['Membership'],
-                     member['firstname'],
-                     member['lastname']])
-    r.t_end()
+    if len(members_missing_in_compass):
+        r.t_start(compass.required_headings)
 
-    r.p('The following records appear in Compass but do not appear in OSM')
+        # Find YP missing from Compass
+        for member in members_missing_in_compass:
+                compass_record = compass.member2compass(member, section)
+                r.t_row([compass_record[k] for k in compass.required_headings])
+        r.t_end()
 
-    r.t_start(['Membership', 'Firstname', 'Surname'])
+    r.p('The following records appear in Compass but do not appear in OSM:')
 
-    compass_members = c.section_yp_members_without_leaders(section)
-    for member in compass_members:
+    members_missing_in_osm = [
+        member for member in c.section_yp_members_without_leaders(section)
         if not group.find_by_name(member['forenames'],
                                   member['surname'],
-                                  section_wanted=section):
-            r.t_row([member['membership_number'],
-                     member['forenames'],
-                     member['surname']])
+                                  section_wanted=section)]
 
-    r.t_end()
+    if len(members_missing_in_osm):
+        keys = members_missing_in_osm[0].keys()
+        r.t_start(keys)
+
+        for member in members_missing_in_osm:
+            r.t_row([member[k] for k in keys])
+
+        r.t_end()
 
 
 def process_compass(r, group):
@@ -450,7 +456,7 @@ elements = {'Maclean': COMMON + NOT_ADULT,
             'Garrick': COMMON + NOT_ADULT,
             'Somers': COMMON + NOT_ADULT,
             'Erasmus': COMMON + NOT_ADULT,
-            'Brown': COMMON + NOT_ADULT,
+            'Swinfen': COMMON + NOT_ADULT,
             'Boswell': COMMON + NOT_ADULT,
             'Johnson': COMMON + NOT_ADULT,
             'Paget': COMMON + NOT_ADULT,
@@ -481,16 +487,14 @@ def group_report(r, group, quarter, term):
 
     process_compass(r, group)
 
-    #process_finance_spreadsheet(r, group, quarter)
+    # process_finance_spreadsheet(r, group, quarter)
 
     for section in elements.keys():
         for element in elements[section]:
             element(r, group, section)
 
 
-
-
-def _main(osm, auth, sections, no_email, email, quarter, term):
+def _main(osm, auth, sections, no_email, email, quarter, term, http):
 
     if isinstance(sections, str):
         sections = [sections, ]
@@ -505,7 +509,7 @@ def _main(osm, auth, sections, no_email, email, quarter, term):
         r = Reporter()
 
         if section == 'Group':
-            group_report(r, group, quarter, 
+            group_report(r, group, quarter,
                          term if term is not None else "Active")
         else:
             for element in elements[section]:
@@ -515,20 +519,50 @@ def _main(osm, auth, sections, no_email, email, quarter, term):
             print(r.report())
         elif email:
             print("Sending to {}".format(email))
-            r.send([email,],
-                   'OSM Data Integrity Report for {}'.format(section))            
+            r.send([email, ],
+                   'OSM Data Integrity Report for {}'.format(section))
         else:
             r.send(TO[section],
                    'OSM Data Integrity Report for {}'.format(section))
 
+        if http:
+            print("Serving {}".format(section))
+            serve(r)
+
+
+def serve(report):
+    import http.server
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+
+        def do_GET(s):
+            s.send_response(200)
+            s.send_header("Content-type", "text/html")
+            s.end_headers()
+            s.wfile.write(bytes(report.report(), 'UTF-8'))
+
+    server_address = ('', 8000)
+    httpd = http.server.HTTPServer(server_address, Handler)
+
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+
+    httpd.server_close()
+
+
 def get_quarter():
     """Return the currect quarter from todays date."""
     month = datetime.datetime.today().month
-    if month in [4, 5, 6]: return "Q1"
-    if month in [7, 8, 9]: return "Q2"
-    if month in [10, 11, 12]: return "Q3"
-    if month in [1, 2, 3]: return "Q4"
-
+    if month in [4, 5, 6]:
+        return "Q1"
+    if month in [7, 8, 9]:
+        return "Q2"
+    if month in [10, 11, 12]:
+        return "Q3"
+    if month in [1, 2, 3]:
+        return "Q4"
 
 
 if __name__ == '__main__':
@@ -554,36 +588,13 @@ if __name__ == '__main__':
                   "['Q1', 'Q2', 'Q3', 'Q4']".format(args['--quarter']))
         sys.exit(1)
 
-
     auth = osm.Authorisor(args['<apiid>'], args['<token>'])
     auth.load_from_file(open(DEF_CREDS, 'r'))
 
-    _main(osm, auth, 
-          args['<section>'], 
-          args['--no_email'], 
+    _main(osm, auth,
+          args['<section>'],
+          args['--no_email'],
           args['--email'],
           args['--quarter'],
-          args['--term'])
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+          args['--term'],
+          args['--web'])

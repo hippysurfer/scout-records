@@ -21,7 +21,7 @@ class Group(object):
 
     SECTIONIDS = {'Adult': '18305',
                   'Paget': '9960',
-                  'Brown': '17326',
+                  'Swinfen': '17326',
                   'Maclean': '14324',
                   'Rowallan': '12700',
                   'Boswell': '10363',
@@ -34,7 +34,7 @@ class Group(object):
     ADULT_SECTION = 'Adult'
 
     YP_SECTIONS = ['Paget',
-                   'Brown',
+                   'Swinfen',
                    'Maclean',
                    'Rowallan',
                    'Boswell',
@@ -89,7 +89,7 @@ class Group(object):
     def all_yp_members_without_senior_duplicates_dict(self):
         return {'Paget': self.remove_senior_duplicates('Paget',
                                                        self.all_cubs()),
-                'Brown': self.remove_senior_duplicates('Brown',
+                'Swinfen': self.remove_senior_duplicates('Swinfen',
                                                        self.all_cubs()),
                 'Maclean': self.remove_senior_duplicates('Maclean',
                                                          self.all_scouts()),
@@ -139,7 +139,7 @@ class Group(object):
 
     def all_beavers(self):
         return self.section_yp_members_without_leaders('Paget') +\
-            self.section_yp_members_without_leaders('Brown') +\
+            self.section_yp_members_without_leaders('Swinfen') +\
             self.section_yp_members_without_leaders('Garrick')
 
     def all_cubs(self):
@@ -245,13 +245,13 @@ class Group(object):
         for i in range(5, 9):
             r['Beavers']['F'][i] = len(
                 [m for m in
-                 self.girls_in_section('Brown') +
+                 self.girls_in_section('Swinfen') +
                  self.girls_in_section('Paget') +
                  self.girls_in_section('Garrick')
                  if int(m.age().days / 365) == i])
             r['Beavers']['M'][i] = len(
                 [m for m in
-                 self.boys_in_section('Brown') +
+                 self.boys_in_section('Swinfen') +
                  self.boys_in_section('Paget') +
                  self.boys_in_section('Garrick')
                  if int(m.age().days / 365) == i])
