@@ -108,7 +108,8 @@ compass_headings = ("Membership Number",
                     "Dietary Needs",
                     "Medical Information")
 
-required_headings = ("Look-up Title **",
+required_headings = ("Membership Number",
+                     "Look-up Title **",
                      "Forename(s)**",
                      "Surnames **",
                      "Look-up Role **",
@@ -262,6 +263,7 @@ def get_parent(member):
 def member2compass(member, section):
     j = {}
 
+    j['Membership Number'] = member['Membership']
     j["Look-up Title **"] = 'Mr' \
                             if (member['Sex'].lower() == 'm' or
                                 member['Sex'].lower() == 'male') else 'Miss'
@@ -466,13 +468,21 @@ class Compass:
                          os.path.splitext(section)[0])
              for section in os.listdir(self._outdir)], ignore_index=True)
 
-    def find_by_name(self, firstname, lastname, section_wanted=None):
+    def find_by_name(self, firstname, lastname, section_wanted=None,
+                     ignore_second_name=True):
         """Return list of matching records."""
 
         recs = self._records
-
-        df = recs[(recs.forenames_l == firstname.lower().strip()) &
+        
+        if ignore_second_name:
+            df = recs[
+                (recs.forenames_l.str.lower().str.match(
+                        '^{}.*$'.format(firstname.strip(' ')[0].lower().strip()))) &
                   (recs.surname_l == lastname.lower().strip())]
+            
+        else:
+            df = recs[(recs.forenames_l == firstname.lower().strip()) &
+                      (recs.surname_l == lastname.lower().strip())]
 
         if section_wanted is not None:
             df = df[(df['section'] == section_wanted)]

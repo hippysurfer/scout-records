@@ -242,6 +242,7 @@ def process_finance_spreadsheet(r, group, quarter):
     q4_section = wks.col_values(
         1 + headings.index('{} Sec'.format(quarter)))[finance.FIN_HEADER_ROW:]
 
+    group.set_yl_as_yp(False)
     all_yp = group.all_yp_members_without_senior_duplicates_dict()
 
     # create a map from refs to members for later lookup
@@ -259,8 +260,10 @@ def process_finance_spreadsheet(r, group, quarter):
                 member['SeniorSection'] = name
                 new_members.append(member)
 
-    r.sub_title("New members")
-    headings = ['patrol', 'SeniorSection', 'PersonalReference',
+    r.sub_title("Finance Spreadsheet")
+    r.p("The following members appear in the sections in OSM but do not appear"
+        " on the Finance Spreadsheet. (New Members)")
+    headings = ['patrol', 'SeniorSection', 'Membership',
                 'firstname', 'lastname',
                 'PersonalEmail', 'DadEmail', 'MumEmail',
                 'dob', 'joined', 'started']
@@ -282,8 +285,26 @@ def process_finance_spreadsheet(r, group, quarter):
         if ref not in all_osm_references:
             missing_references.append(ref)
 
-    r.sub_title("Old members")
-    [r.p(l) for l in missing_references]
+    r.p("The following members appear in the Finance Spreadsheet but "
+        "do not appear in the sections on OSM. (Old Member)")
+
+    headings = ['Membership',
+                'firstname', 'lastname',
+                'patrol']
+
+    r.t_start(headings)
+
+    for ref in missing_references:
+        if not ref:
+            log.warn("Ignoring null reference.")
+            continue
+        member = group.find_by_ref(ref)
+        if len(member) > 0:
+            r.t_row([member[0][k] for k in headings])
+        else:
+            r.t_row([ref,])
+
+    r.t_end()
 
     # Create a list of all YP who are on the finanace list but are not
     # in the same section in OSM.
@@ -318,8 +339,10 @@ def process_finance_spreadsheet(r, group, quarter):
                                             previous_section,
                                             section_map[name]))
 
-    r.sub_title("Changed members")
-    r.t_start(["Personal Reference", "Old", "New", "First", "Last"])
+    r.sub_title("The following have moves sections on OSM but are "
+                "still recorded in their old section in the Finance "
+                "Spreadsheet (Changed members)")
+    r.t_start(["Membership", "Old", "New", "First", "Last"])
     for member in changed_members:
         r.t_row([
             member[0][OSM_REF_FIELD],
@@ -338,10 +361,13 @@ def section_compass_check(r, group, section):
     c = compass.Compass(outdir=os.path.abspath('compass_exports'))
     c.load_from_dir()
 
+    group.set_yl_as_yp(True)
     osm_members = group.section_yp_members_without_leaders(section)
 
     r.sub_title('Compass')
-    r.p('The following records appear in OSM but do not appear in Compass')
+    r.p('The following records appear in OSM but do not appear in Compass. '
+        'This may be because their entry in Compass has a different Firstname '
+        'or Lastname.')
 
     if section not in c.sections():
         r.p('No Compass data available for Section: {}'.format(section))
@@ -351,7 +377,8 @@ def section_compass_check(r, group, section):
                                   if c.find_by_name(
                                       member['firstname'],
                                       member['lastname'],
-                                      section_wanted=section).empty]
+                                      section_wanted=section,
+                                      ignore_second_name=True).empty]
 
     if len(members_missing_in_compass):
         r.t_start(compass.required_headings)
@@ -362,13 +389,15 @@ def section_compass_check(r, group, section):
                 r.t_row([compass_record[k] for k in compass.required_headings])
         r.t_end()
 
-    r.p('The following records appear in Compass but do not appear in OSM:')
+    r.p('The following records appear in Compass but do not appear in OSM. '
+        'This may be because the Firstname or Lastname is different.')
 
     members_missing_in_osm = [
         member for member in c.section_yp_members_without_leaders(section)
         if not group.find_by_name(member['forenames'],
                                   member['surname'],
-                                  section_wanted=section)]
+                                  section_wanted=section,
+                                  ignore_second_name=True)]
 
     if len(members_missing_in_osm):
         keys = members_missing_in_osm[0].keys()
@@ -386,31 +415,37 @@ def process_compass(r, group):
     c = compass.Compass(outdir=os.path.abspath('compass_exports'))
     c.load_from_dir()
 
+    group.set_yl_as_yp(True)
     all_yp = group.all_yp_members_without_senior_duplicates_dict()
 
     r.sub_title('Compass')
-    r.p('The following records appear in OSM but do not appear in Compass')
+    r.p('The following records appear in OSM but do not appear in Compass '
+        'This may be because their entry in Compass has a different Firstname '
+        'or Lastname.  Only the first part of the Firstname is taken in to account.')
 
     # Generate a dict of the sections with missing members.
     members_missing_in_compass = {
         s: [member for member in all_yp[s]
             if c.find_by_name(
                 member['firstname'],
-                member['lastname']).empty]
+                member['lastname'],
+                ignore_second_name=True).empty]
         for s in all_yp.keys()}
 
     # If the dict is not empty.
     if list(itertools.chain(*members_missing_in_compass.values())):
-        r.t_start(['OSM section', ] + list(compass.required_headings))
+        r.t_start(['OSM section'] + list(compass.required_headings))
 
         for section, members in members_missing_in_compass.items():
             for member in members:
                 compass_record = compass.member2compass(member, section)
-                r.t_row([section, ] + [compass_record[k]
+                r.t_row([section] + [compass_record[k]
                                        for k in compass.required_headings])
         r.t_end()
 
-    r.p('The following records appear in Compass but do not appear in OSM')
+    r.p('The following records appear in Compass but do not appear in OSM '
+        'This may be because the Firstname or Lastname is different. Only '
+        'the first part of the Firstname is taken in to account.')
 
     r.t_start(['Compass Section', 'Membership', 'Firstname', 'Surname'])
 
@@ -418,7 +453,8 @@ def process_compass(r, group):
     for section in compass_sections.keys():
         for i, member in compass_sections[section].iterrows():
             if not group.find_by_name(member['forenames'],
-                                      member['surname']):
+                                      member['surname'],
+                                      ignore_second_name=True):
                 r.t_row([section,
                          member['membership_number'],
                          member['forenames'],
@@ -505,7 +541,7 @@ def group_report(r, group, quarter, term):
 
     process_compass(r, group)
 
-    # process_finance_spreadsheet(r, group, quarter)
+    process_finance_spreadsheet(r, group, quarter)
 
     for section in elements.keys():
         for element in elements[section]:

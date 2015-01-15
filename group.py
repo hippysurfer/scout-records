@@ -4,7 +4,7 @@ import osm
 
 log = logging.getLogger(__name__)
 
-OSM_REF_FIELD = 'PersonalReference'
+OSM_REF_FIELD = 'Membership'
 
 
 class Member(osm.Member):
@@ -48,6 +48,7 @@ class Group(object):
         self._important_fields = important_fields
         self._sections = self._osm.OSM(auth, self.SECTIONIDS.values(), 
                                        term)
+        self.include_yl_as_yp = False
 
     def section_all_members(self, section):
         # If there a no members the 'members' will be an empty list
@@ -109,18 +110,28 @@ class Group(object):
     def section_missing_references(self, section_name):
         return self._section_missing_references(section_name)
 
+    def set_yl_as_yp(self, yes):
+        """Include Young Leaders as Young People"""
+        self.include_yl_as_yp = yes
+
+    def get_yp_patrol_exclude_list(self):
+        l = ['leaders', 'winter adv.']
+        if self.include_yl_as_yp:
+            l += ['young leaders',]
+        return l
+
     def section_yp_members_without_leaders(self, section):
         return [member for member in
                 self.section_all_members(section)
                 if not member['patrol'].lower() in
-                ['leaders', 'young leaders', 'winter adv.']]
+                self.get_yp_patrol_exclude_list()]
 
     def section_leaders_in_yp_section(self, section):
         return [member for member in
                 self.section_all_members(
                     section)
                 if member['patrol'].lower() in
-                ['leaders', 'young leaders', 'winter adv.']]
+                self.get_yp_patrol_exclude_list()]
 
     def all_leaders_in_yp_sections(self):
         # Make a list of all the leaders
@@ -166,7 +177,8 @@ class Group(object):
 
         return matching_sections
 
-    def find_by_name(self, firstname, lastname, section_wanted=None):
+    def find_by_name(self, firstname, lastname, section_wanted=None,
+                     ignore_second_name=False):
         """Return a list of records with matching names"""
         l = []
         sections = self.all_yp_members_dict()
@@ -174,8 +186,24 @@ class Group(object):
             if (section_wanted and section_wanted != section):
                 continue
             for member in sections[section]:
-                if (member['firstname'].lower().strip() == firstname.lower().strip() and
+                osm_firstname = member['firstname'].lower().strip()
+                if ignore_second_name:
+                    osm_firstname = osm_firstname.split(' ')[0]
+                    firstname = firstname.split(' ')[0]
+                if (osm_firstname.lower().strip() == firstname.lower().strip() and
                     member['lastname'].lower().strip() == lastname.lower().strip()):
+                    l.append(member)
+        return l
+
+    def find_by_ref(self, ref, section_wanted=None):
+        """Return a list of records with matching refs"""
+        l = []
+        sections = self.all_yp_members_dict()
+        for section in sections.keys():
+            if (section_wanted and section_wanted != section):
+                continue
+            for member in sections[section]:
+                if (member[OSM_REF_FIELD].lower().strip() == ref.lower().strip()):
                     l.append(member)
         return l
 
@@ -227,7 +255,7 @@ class Group(object):
                 if m['Sex'].lower() == 'm' or m['Sex'].lower() == 'male']
 
     def census(self):
-        """Return the information required for the anual census."""
+        """Return the information required for the annual census."""
 
         r = {'Beavers': {'M':
                          {5: 0, 6: 0, 7: 0, 8: 0},
