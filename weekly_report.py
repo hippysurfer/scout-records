@@ -339,9 +339,9 @@ def process_finance_spreadsheet(r, group, quarter):
                                             previous_section,
                                             section_map[name]))
 
-    r.sub_title("The following have moves sections on OSM but are "
-                "still recorded in their old section in the Finance "
-                "Spreadsheet (Changed members)")
+    r.p("The following have moved sections on OSM but are "
+        "still recorded in their old section in the Finance "
+        "Spreadsheet (Changed members)")
     r.t_start(["Membership", "Old", "New", "First", "Last"])
     for member in changed_members:
         r.t_row([
