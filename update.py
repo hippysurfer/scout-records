@@ -23,9 +23,7 @@ from docopt import docopt
 import osm
 import pprint
 
-
-import gspread
-import creds
+import google
 
 from group import Group, OSM_REF_FIELD
 
@@ -444,7 +442,7 @@ if __name__ == '__main__':
 
     # creds needs to contain a tuple of the following form
     #     creds = ('username','password')
-    gc = gspread.login(*creds.creds)
+    gc = google.conn()
 
     #try:
     #    _main(osm, gc)

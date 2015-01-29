@@ -37,8 +37,7 @@ from email.mime.text import MIMEText
 from group import Group
 from update import MAPPING, OSM_REF_FIELD
 import finance
-import gspread
-import creds
+import google
 import compass
 
 PERSONAL_REFERENCE_RE = re.compile('^[A-Z0-9]{4}-[A-Z]{2}-\d{6}$')
@@ -225,7 +224,7 @@ def check_bad_data(r, group, section):
 def process_finance_spreadsheet(r, group, quarter):
     log.info("Processing finance spreadsheet...")
 
-    gc = gspread.login(*creds.creds)
+    gc = google.conn()
 
     fin = gc.open(finance.FINANCE_SPREADSHEET_NAME)
 
