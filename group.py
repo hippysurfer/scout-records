@@ -4,7 +4,7 @@ import osm
 
 log = logging.getLogger(__name__)
 
-OSM_REF_FIELD = 'PersonalReference'
+OSM_REF_FIELD = 'Membership'
 
 
 class Member(osm.Member):
@@ -21,7 +21,7 @@ class Group(object):
 
     SECTIONIDS = {'Adult': '18305',
                   'Paget': '9960',
-                  'Brown': '17326',
+                  'Swinfen': '17326',
                   'Maclean': '14324',
                   'Rowallan': '12700',
                   'Boswell': '10363',
@@ -34,7 +34,7 @@ class Group(object):
     ADULT_SECTION = 'Adult'
 
     YP_SECTIONS = ['Paget',
-                   'Brown',
+                   'Swinfen',
                    'Maclean',
                    'Rowallan',
                    'Boswell',
@@ -48,6 +48,7 @@ class Group(object):
         self._important_fields = important_fields
         self._sections = self._osm.OSM(auth, self.SECTIONIDS.values(), 
                                        term)
+        self.include_yl_as_yp = False
 
     def section_all_members(self, section):
         # If there a no members the 'members' will be an empty list
@@ -89,7 +90,7 @@ class Group(object):
     def all_yp_members_without_senior_duplicates_dict(self):
         return {'Paget': self.remove_senior_duplicates('Paget',
                                                        self.all_cubs()),
-                'Brown': self.remove_senior_duplicates('Brown',
+                'Swinfen': self.remove_senior_duplicates('Swinfen',
                                                        self.all_cubs()),
                 'Maclean': self.remove_senior_duplicates('Maclean',
                                                          self.all_scouts()),
@@ -109,18 +110,28 @@ class Group(object):
     def section_missing_references(self, section_name):
         return self._section_missing_references(section_name)
 
+    def set_yl_as_yp(self, yes):
+        """Include Young Leaders as Young People"""
+        self.include_yl_as_yp = yes
+
+    def get_yp_patrol_exclude_list(self):
+        l = ['leaders', 'winter adv.']
+        if self.include_yl_as_yp:
+            l += ['young leaders',]
+        return l
+
     def section_yp_members_without_leaders(self, section):
         return [member for member in
                 self.section_all_members(section)
                 if not member['patrol'].lower() in
-                ['leaders', 'young leaders']]
+                self.get_yp_patrol_exclude_list()]
 
     def section_leaders_in_yp_section(self, section):
         return [member for member in
                 self.section_all_members(
                     section)
                 if member['patrol'].lower() in
-                ['leaders', 'young leaders']]
+                self.get_yp_patrol_exclude_list()]
 
     def all_leaders_in_yp_sections(self):
         # Make a list of all the leaders
@@ -139,7 +150,7 @@ class Group(object):
 
     def all_beavers(self):
         return self.section_yp_members_without_leaders('Paget') +\
-            self.section_yp_members_without_leaders('Brown') +\
+            self.section_yp_members_without_leaders('Swinfen') +\
             self.section_yp_members_without_leaders('Garrick')
 
     def all_cubs(self):
@@ -165,6 +176,36 @@ class Group(object):
                 matching_sections.append(section)
 
         return matching_sections
+
+    def find_by_name(self, firstname, lastname, section_wanted=None,
+                     ignore_second_name=False):
+        """Return a list of records with matching names"""
+        l = []
+        sections = self.all_yp_members_dict()
+        for section in sections.keys():
+            if (section_wanted and section_wanted != section):
+                continue
+            for member in sections[section]:
+                osm_firstname = member['firstname'].lower().strip()
+                if ignore_second_name:
+                    osm_firstname = osm_firstname.split(' ')[0]
+                    firstname = firstname.split(' ')[0]
+                if (osm_firstname.lower().strip() == firstname.lower().strip() and
+                    member['lastname'].lower().strip() == lastname.lower().strip()):
+                    l.append(member)
+        return l
+
+    def find_by_ref(self, ref, section_wanted=None):
+        """Return a list of records with matching refs"""
+        l = []
+        sections = self.all_yp_members_dict()
+        for section in sections.keys():
+            if (section_wanted and section_wanted != section):
+                continue
+            for member in sections[section]:
+                if (member[OSM_REF_FIELD].lower().strip() == ref.lower().strip()):
+                    l.append(member)
+        return l
 
     # For each section we need to look at whether a member appears in a
     # senior section too (they will if they are in the process of
@@ -214,7 +255,7 @@ class Group(object):
                 if m['Sex'].lower() == 'm' or m['Sex'].lower() == 'male']
 
     def census(self):
-        """Return the information required for the anual census."""
+        """Return the information required for the annual census."""
 
         r = {'Beavers': {'M':
                          {5: 0, 6: 0, 7: 0, 8: 0},
@@ -232,13 +273,13 @@ class Group(object):
         for i in range(5, 9):
             r['Beavers']['F'][i] = len(
                 [m for m in
-                 self.girls_in_section('Brown') +
+                 self.girls_in_section('Swinfen') +
                  self.girls_in_section('Paget') +
                  self.girls_in_section('Garrick')
                  if int(m.age().days / 365) == i])
             r['Beavers']['M'][i] = len(
                 [m for m in
-                 self.boys_in_section('Brown') +
+                 self.boys_in_section('Swinfen') +
                  self.boys_in_section('Paget') +
                  self.boys_in_section('Garrick')
                  if int(m.age().days / 365) == i])

@@ -610,7 +610,7 @@ class Section(OSMObject):
                         self['sectionname'],
                         [(term['name'], term['past']) for
                          term in self.terms]))
-                sys.exit(1)
+                #sys.exit(1)
 
         if len(self.terms) == 0:
             # If there is no active term it does make sense to gather
