@@ -21,9 +21,7 @@ Options:
 from docopt import docopt
 
 import sys
-import urllib.request, urllib.parse, urllib.error
-import urllib.request, urllib.error, urllib.parse
-import json
+import requests
 import pickle
 import logging
 import datetime
@@ -166,41 +164,28 @@ class Accessor(object):
         if fields:
             values.update(fields)
 
-        data = urllib.parse.urlencode(values)
-        req = urllib.request.Request(url, data.encode('utf-8'))
-
         obj = self.__class__.__cache_lookup__(url, values)
 
         if not obj:
-            log.debug("urlopen: {0}, {1}".format(url, data.encode('utf-8')))
-
             try:
-                result = urllib.request.urlopen(req).readall().decode('utf-8')
-            except urllib.error.HTTPError as err:
-                if str(err) != 'HTTP Error 500: No permissions':
-                    # We don't want to winge about permissions errors here.
-                    log.error("urlopen failed: {0}, {1}".format(
-                        url, data.encode('utf-8')))
-                raise
+                result = requests.post(url, data=values)
             except:
                 log.error("urlopen failed: {0}, {1}".format(
-                    url, data.encode('utf-8')))
+                    url, repr(values)))
                 raise
+
+            if result.status_code != 200:
+                log.error("urlopen failed with status code {}: {}, {}".format(
+                    result.status_code, url, repr(values)))
 
             # Crude test to see if the response is JSON
             # OSM returns a string as an error case.
             try:
-                if result[0] not in ('[', '{'):
-                    log.warn("Result not JSON because: {0} not in "
-                             "('[', '{{')".format(result[0]))
-                    raise OSMException(url, values, result)
-            except IndexError:
-                # This means that result is not a list
-                log.warn("Result not a list: {0} {1}".format(url, values))
-                log.error(repr(result))
-                raise
-
-            obj = json.loads(result)
+                obj = result.json()
+            except:
+                log.warn("Result not JSON because: {0} not in "
+                         "('[', '{{')".format(result.text))
+                raise OSMException(url, values, result)
 
             if 'error' in obj:
                 log.warn("Error in JSON obj: {0} {1}".format(url, values))
