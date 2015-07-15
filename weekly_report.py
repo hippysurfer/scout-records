@@ -38,7 +38,7 @@ from group import Group
 from update import MAPPING, OSM_REF_FIELD
 import finance
 import google
-import compass
+#import compass
 
 PERSONAL_REFERENCE_RE = re.compile('^[A-Z0-9]{4}-[A-Z]{2}-\d{6}$')
 
@@ -181,23 +181,23 @@ def check_bad_data(r, group, section):
     for member in members:
         report = []
 
-        if member['Sex'].lower() not in ['m', 'f', 'male', 'female']:
+        if member['floating.gender'].lower() not in ['m', 'f', 'male', 'female']:
             report.append("Sex ({}) not in 'M', 'F', 'Male', 'Female'".format(
-                member['Sex']))
+                member['floating.gender']))
 
-        if member['PersonalReference'].strip() == '':
+        if member['customisable_data.PersonalReference'].strip() == '':
             report.append("<b>Missing Personal Reference</b>")
 
         elif not PERSONAL_REFERENCE_RE.match(
-                member['PersonalReference'].strip()):
+                member['customisable_data.PersonalReference'].strip()):
             report.append("<b>Bad Personal Reference ('{}')"
                           " must match pattern: SSSS-FF-DDMMYY</b>".format(
-                              member['PersonalReference'].strip()))
+                              member['customisable_data.PersonalReference'].strip()))
 
-        if member['PrimaryAddress'].strip() == '':
+        if member['contact_primary_1.address1'].strip() == '':
             report.append("Primary Address missing")
 
-        if member['HomeTel'].strip() == '':
+        if member['contact_primary_1.phone1'].strip() == '':
             report.append("Home Tel missing")
 
         if section != 'Adult':
@@ -216,8 +216,8 @@ def check_bad_data(r, group, section):
         r.sub_title("Records with bad or missing data.")
 
         for report in reports:
-            r.p("{} {}:".format(report[0]['firstname'],
-                                report[0]['lastname']))
+            r.p("{} {}:".format(report[0]['first_name'],
+                                report[0]['last_name']))
             r.ul(report[1])
 
 
@@ -262,14 +262,21 @@ def process_finance_spreadsheet(r, group, quarter):
     r.sub_title("Finance Spreadsheet")
     r.p("The following members appear in the sections in OSM but do not appear"
         " on the Finance Spreadsheet. (New Members)")
-    headings = ['patrol', 'SeniorSection', 'Membership',
-                'firstname', 'lastname',
-                'PersonalEmail', 'DadEmail', 'MumEmail',
-                'dob', 'joined', 'started']
+    headings = [('Patrol', 'patrol'),
+                ('SeniorSection', 'SeniorSection'),
+                ('Membership', 'customisable_data.membershipno'),
+                ('Firstname', 'first_name'),
+                ('Lastname', 'last_name'),
+                ('PersonalEmail', 'contact_primary_member.email1'),
+                ('DadEmail', 'contact_primary_2.email1'),
+                ('MumEmail', 'contact_primary_1.email1'),
+                ('dob', 'date_of_birth'),
+                ('Joined', 'joined'),
+                ('Started', 'started')]
 
-    r.t_start(headings)
+    r.t_start([h[0] for h in headings])
     for member in new_members:
-        r.t_row([member[k] for k in headings])
+        r.t_row([member[k[1]] for k in headings])
     r.t_end()
 
     # Create a list of all YP that are on the finance list but are not
@@ -287,11 +294,12 @@ def process_finance_spreadsheet(r, group, quarter):
     r.p("The following members appear in the Finance Spreadsheet but "
         "do not appear in the sections on OSM. (Old Member)")
 
-    headings = ['Membership',
-                'firstname', 'lastname',
-                'patrol']
+    headings = [('Membership', 'customisable_data.membershipno'),
+                ('Firstname', 'first_name'),
+                ('Lastname', 'last_name'),
+                ('Patrol', 'patrol')]
 
-    r.t_start(headings)
+    r.t_start([h[0] for h in headings])
 
     for ref in missing_references:
         if not ref:
@@ -299,7 +307,7 @@ def process_finance_spreadsheet(r, group, quarter):
             continue
         member = group.find_by_ref(ref)
         if len(member) > 0:
-            r.t_row([member[0][k] for k in headings])
+            r.t_row([member[0][k[1]] for k in headings])
         else:
             r.t_row([ref,])
 
@@ -347,8 +355,8 @@ def process_finance_spreadsheet(r, group, quarter):
             member[0][OSM_REF_FIELD],
             member[1],
             member[2],
-            all_members[member[0][OSM_REF_FIELD]]['firstname'],
-            all_members[member[0][OSM_REF_FIELD]]['lastname']])
+            all_members[member[0][OSM_REF_FIELD]]['first_name'],
+            all_members[member[0][OSM_REF_FIELD]]['last_name']])
 
     r.t_end()
 
@@ -502,7 +510,9 @@ def census(r, group):
 
 COMMON = [intro,
           check_bad_data]
-NOT_ADULT = [section_compass_check, ]
+
+#NOT_ADULT = [section_compass_check, ]
+NOT_ADULT = []
 
 elements = {'Maclean': COMMON + NOT_ADULT,
             'Rowallan': COMMON + NOT_ADULT,
@@ -538,7 +548,7 @@ def group_report(r, group, quarter, term):
 
     r.t_end()
 
-    process_compass(r, group)
+    #process_compass(r, group)
 
     process_finance_spreadsheet(r, group, quarter)
 

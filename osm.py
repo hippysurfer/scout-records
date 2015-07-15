@@ -123,7 +123,7 @@ class Accessor(object):
     @classmethod
     def __cache_load__(cls, cache_file):
         cls.__cache__ = pickle.load(cache_file)
-        log.debug("Cache content: {}".format(repr(cls.__cache__)))
+        # log.debug("Cache content: {}".format(repr(cls.__cache__)))
 
     @classmethod
     def __cache_lookup__(cls, url, data):
@@ -187,12 +187,12 @@ class Accessor(object):
                          "('[', '{{')".format(result.text))
                 raise OSMException(url, values, result)
 
-            if 'error' in obj:
-                log.warn("Error in JSON obj: {0} {1}".format(url, values))
-                raise OSMException(url, values, obj['error'])
-            if 'err' in obj:
-                log.warn("Err in JSON obj: {0} {1}".format(url, values))
-                raise OSMException(url, values, obj['err'])
+            # if 'error' in obj:
+            #     log.warn("Error in JSON obj: {0} {1}".format(url, values))
+            #     raise OSMException(url, values, obj['error'])
+            # if 'err' in obj:
+            #     log.warn("Err in JSON obj: {0} {1}".format(url, values))
+            #     raise OSMException(url, values, obj['err'])
 
             self.__class__.__cache_set__(url, values, obj)
 
@@ -310,116 +310,61 @@ class Member(OSMObject):
 
         self._section = section
         self._column_map = column_map
-        for k, v in list(self._column_map.items()):
-            self._column_map[k] = v.replace(' ', '')
-
-        self._reverse_column_map = dict((reversed(list(i)) for
-                                         i in list(column_map.items())))
-        self._changed_keys = []
 
     def __str__(self):
-        return "Member: \n Section = {!r}\n column_map = {!r} \n" \
-            "reverse_column_map = {!r} \n record = {}".format(
-                self._section, self._column_map,
-                self._reverse_column_map, OSMObject.__str__(self))
+        return "Member: \n Section = {!r}\n record = {}".format(
+            self._section, OSMObject.__str__(self))
+
+    def lookup(self, key):
+        """Attempt to find a key in the member record."""
+
+        head, tail = key.split('.')
+
+        group_id, columns = [(group['group_id'], group['columns'])
+                             for group in self._column_map
+                             if group['identifier'] == head][0]
+
+        try:
+            field_id = [column['column_id'] for column
+                        in columns
+                        if column['varname'] == tail][0]
+        except:
+            field_id = [
+                column['column_id'] for column
+                in columns
+                if column['label'].lower().replace(" ", "") == tail.lower()][0]
+
+        # field = ""
+        # for k, v in self.__dict__['_record']['custom_data'].items():
+        #     if k == group_id:
+        #         for field_k, field_value in self.__dict__['_record']['custom_data'][k]:
+        #             if field_k == field_id:
+        #                 field = field_value
+        #                 break
+
+        return self.__dict__['_record']['custom_data'][str(group_id)][str(field_id)]
 
     def __getattr__(self, key):
         try:
-            return self._record[key]
+            return self.__dict__['_record'][key]
         except:
-
             try:
-                return self._record[self._reverse_column_map[key]]
+                return self.lookup(key)
             except:
                 raise KeyError("{!r} object has no attribute {!r}: "
-                               "primary keys {!r}, "
-                               "reverse keys: {!r}".format(
-                                   type(self).__name__, key,
-                                   self._record.keys(),
-                                   self._reverse_column_map.keys()))
+                               "".format(
+                                   type(self).__name__, key))
 
     def __getitem__(self, key):
         try:
-            return self._record[key]
+            return self.__dict__['_record'][key]
         except:
             try:
-                return self._record[self._reverse_column_map[key]]
+                return self.lookup(key)
             except:
                 raise KeyError("{!r} object has no attribute {!r}:"
-                               "primary keys {!r}, reverse keys: {!r}".format(
-                                   type(self).__name__, key,
-                                   self._record.keys(),
-                                   self._reverse_column_map.keys()))
-
-    def __setitem__(self, key, value):
-        try:
-            self._record[key] = value
-            if key not in self._changed_keys:
-                self._changed_keys.append(key)
-        except:
-            try:
-                self._record[self._reverse_column_map[key]] = value
-                if self._reverse_column_map[key] not in self._changed_keys:
-                    self._changed_keys.append(self._reverse_column_map[key])
-
-            except:
-                raise KeyError("{!r} object has no attribute {!r}:"
-                               "primary keys {!r}, reverse keys: {!r}".format(
-                                   type(self).__name__, key,
-                                   self._record.keys(),
-                                   self._reverse_column_map.keys()))
-
-            raise KeyError("{!r} object has no attribute {!r}: "
-                           "avaliable keys: {!r}".format(
-                               (type(self).__name__, key,
-                                self._record.keys())))
-
-    # def remove(self, last_date):
-    #     """Remove the member record."""
-    #     delete_url='users.php?action=deleteMember&type=leaveremove&section={0}'
-    #     delete_url = delete_url.format(self._section.section)
-    #     fields={ 'scouts': ["{0}".format(self.scoutid),],
-    #              'sectionid': self._section.sectionid,
-    #              'date': last_date }
-
-    #     self._accessor(delete_url, fields, clear_cache=True, debug=True)
-
-    def save(self):
-        """Write the member to the section."""
-        update_url = 'users.php?action=updateMember&dateFormat=generic'
-        patrol_url = 'users.php?action=updateMemberPatrol'
-        create_url = 'users.php?action=newMember'
-
-        if self['scoutid'] == '':
-            # create
-            fields = {}
-            for key in self._changed_keys:
-                fields[key] = self._record[key]
-            fields['sectionid'] = self._section['sectionid']
-            record = self._accessor(create_url, fields, clear_cache=True,
-                                    debug=True)
-            self['scoutid'] = record['scoutid']
-        else:
-            # update
-            fields = {}
-            for key in self._changed_keys:
-                fields[key] = self._record[key]
-
-            result = True
-            for key in fields:
-                record = self._accessor(
-                    update_url,
-                    {'scoutid': self['scoutid'],
-                     'column': self._reverse_column_map[key],
-                     'value': fields[key],
-                     'sectionid': self._section['sectionid']},
-                    clear_cache=True, debug=True)
-                if record[self._reverse_column_map[key]] != fields[key]:
-                    result = False
-
-            # TODO handle change to grouping.
-
-            return result
+                               "".format(
+                                   type(self).__name__, key))
 
     def get_badges(self):
         "Return a list of badges objects for this member."
@@ -432,74 +377,19 @@ class Member(OSMObject):
 
 
 class Members(OSMObject):
-    DEFAULT_DICT = {'address': '',
-                    'address2': '',
-                    'age': '',
-                    'custom1': '',
-                    'custom2': '',
-                    'custom3': '',
-                    'custom4': '',
-                    'custom5': '',
-                    'custom6': '',
-                    'custom7': '',
-                    'custom8': '',
-                    'custom9': '',
-                    'dob': '',
-                    'email1': '',
-                    'email2': '',
-                    'email3': '',
-                    'email4': '',
-                    'ethnicity': '',
-                    'firstname': '',
-                    'joined': '',
-                    'joining_in_yrs': '',
-                    'lastname': '',
-                    'medical': '',
-                    'notes': '',
-                    'parents': '',
-                    'patrol': '',
-                    'patrolid': '',
-                    'patrolleader': '',
-                    'phone1': '',
-                    'phone2': '',
-                    'phone3': '',
-                    'phone4': '',
-                    'religion': '',
-                    'school': '',
-                    'scoutid': '',
-                    'started': '',
-                    'subs': '',
-                    'type': '',
-                    'yrs': 0}
 
-    def __init__(self, osm, section, accessor, column_map, record):
+    def __init__(self, osm, section, accessor, record):
         self._osm = osm,
         self._section = section
         self._accessor = accessor,
-        self._column_map = column_map
-        self._identifier = record['identifier']
+        self._column_map = record['meta']['structure']
 
         members = {}
-        for member in record['items']:
-            members[member[self._identifier]] = MemberClass(
-                osm, section, accessor, column_map, member)
+        for key, member in record['data'].items():
+            members[key] = MemberClass(
+                osm, section, accessor, self._column_map, member)
 
         OSMObject.__init__(self, osm, accessor, members)
-
-    def new_member(self, firstname, lastname, dob, startedsection, started):
-        new_member = MemberClass(self._osm, self._section,
-                                 self._accessor, self._column_map,
-                                 self.DEFAULT_DICT)
-        new_member['firstname'] = firstname
-        new_member['lastname'] = lastname
-        new_member['dob'] = dob
-        new_member['startedsection'] = startedsection
-        new_member['started'] = started
-        new_member['patrolid'] = '-1'
-        new_member['patrolleader'] = '0'
-        new_member['phone1'] = ''
-        new_member['email1'] = ''
-        return new_member
 
 
 class Event(OSMObject):
@@ -569,12 +459,6 @@ class Section(OSMObject):
     def __init__(self, osm, accessor, record, init=True, term=None):
         OSMObject.__init__(self, osm, accessor, record)
 
-        try:
-            self._member_column_map = record['sectionConfig']['columnNames']
-        except KeyError:
-            log.debug("No extra member columns.")
-            self._member_column_map = {}
-
         self.requested_term = term
 
         if init:
@@ -620,17 +504,19 @@ class Section(OSMObject):
             self.core = None
         else:
             self.term = self.terms[-1]
-            self.challenge = self._get_badges('challenge')
-            self.activity = self._get_badges('activity')
-            self.staged = self._get_badges('staged')
-            self.core = self._get_badges('core')
+            # self.challenge = self._get_badges('challenge')
+            # self.activity = self._get_badges('activity')
+            # self.staged = self._get_badges('staged')
+            # self.core = self._get_badges('core')
 
         log.debug("Configured term = {}".format(self.term))
+
+
         try:
             self.members = self._get_members()
         except:
             log.warn("Failed to get members for section {0}"
-                     .format(self['sectionname']))
+                     .format(self['sectionname']), exc_info=True)
             self.members = []
 
         self.programme = []
@@ -670,9 +556,9 @@ class Section(OSMObject):
         pass
 
     def _get_members(self):
-        url = "users.php?&action=getUserDetails" \
-              "&sectionid={0}" \
-              "&termid={1}" \
+        url = "ext/members/contact/grid/?action=getMembers" \
+              "&section_id={0}" \
+              "&term_id={1}" \
               "&dateFormat=uk" \
               "&section={2}" \
             .format(self['sectionid'],
@@ -680,7 +566,7 @@ class Section(OSMObject):
                     self['section'])
 
         return Members(self._osm, self, self._accessor,
-                       self._member_column_map, self._accessor(url))
+                       self._accessor(url))
 
     def _get_programme(self):
         url = "programme.php?action=getProgrammeSummary"\
@@ -775,18 +661,22 @@ if __name__ == '__main__':
 
         pp.pprint(accessor(args['<query>']))
 
+    osm = OSM(auth, sectionid_list)
+    test_section = args['-s'] if args['-s'] else '15797'
+    members = osm.sections[test_section].members
 
-    #osm = OSM(auth, sectionid_list)
+    #import pdb
+    #pdb.set_trace()
+    for v in members.values():
+        print(str(v))
 
     #log.debug('Sections - {0}\n'.format(osm.sections))
 
 
-    #test_section = '15797'
     #for badge in list(osm.sections[test_section].challenge.values()):
     #    log.debug('{0}'.format(badge._record))
               
-    #members = osm.sections[test_section].members
-
+    
     #    member = members[members.keys()[0]]
     #member['special'] = 'changed'
     #member.save()

@@ -4,14 +4,14 @@ import osm
 
 log = logging.getLogger(__name__)
 
-OSM_REF_FIELD = 'Membership'
+OSM_REF_FIELD = 'customisable_data.membershipno'
 
 
 class Member(osm.Member):
 
     def age(self, ref_date=datetime.now()):
         dob = datetime.strptime(
-            self['dob'], '%d/%m/%Y')
+            self['date_of_birth'], '%Y-%m-%d')
         return ref_date - dob
 
 osm.MemberClass = Member
@@ -248,11 +248,11 @@ class Group(object):
 
     def girls_in_section(self, section):
         return [m for m in self.section_yp_members_without_leaders(section)
-                if m['Sex'].lower() == 'f' or m['Sex'].lower() == 'female']
+                if m['floating.gender'].lower() == 'f' or m['floating.gender'].lower() == 'female']
 
     def boys_in_section(self, section):
         return [m for m in self.section_yp_members_without_leaders(section)
-                if m['Sex'].lower() == 'm' or m['Sex'].lower() == 'male']
+                if m['floating.gender'].lower() == 'm' or m['floating.gender'].lower() == 'male']
 
     def census(self):
         """Return the information required for the annual census."""
