@@ -284,12 +284,12 @@ def process_finance_spreadsheet(r, group, quarter):
     # in OSM.
     all_osm_references = []
     for name, section_members in all_yp.items():
-        all_osm_references.extend([member[OSM_REF_FIELD]
+        all_osm_references.extend([member[OSM_REF_FIELD].strip()
                                    for member in section_members])
 
     missing_references = []
     for ref in fin_references:
-        if ref not in all_osm_references:
+        if ref and (ref.strip() not in all_osm_references):
             missing_references.append(ref)
 
     r.p("The following members appear in the Finance Spreadsheet but "
