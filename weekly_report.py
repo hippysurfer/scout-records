@@ -88,9 +88,10 @@ class Reporter(object):
 
             msg.attach(body)
 
-            hostname = 'www.thegrindstone.me.uk' \
-                       if not socket.gethostname() == 'rat' \
-                       else 'localhost'
+            #hostname = 'www.thegrindstone.me.uk' \
+            #           if not socket.gethostname() == 'rat' \
+            #           else 'localhost'
+            hostname = 'localhost'
 
             s = smtplib.SMTP(hostname)
             s.sendmail(fro, dest, msg.as_string())
