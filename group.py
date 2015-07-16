@@ -4,7 +4,8 @@ import osm
 
 log = logging.getLogger(__name__)
 
-OSM_REF_FIELD = 'customisable_data.membershipno'
+#OSM_REF_FIELD = 'customisable_data.membershipno'
+OSM_REF_FIELD = 'customisable_data.PersonalReference'
 
 
 class Member(osm.Member):

@@ -118,5 +118,8 @@ class Google:
     def open(self, name):
         return Sheet(self, self.gc.open(name))
 
+    def open_by_key(self, key):
+        return Sheet(self, self.gc.open_by_key(key))
+
     def open_by_ref(self, ref):
         return Sheet(self, self.gc.open(ref))

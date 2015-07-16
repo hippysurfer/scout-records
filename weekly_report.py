@@ -228,6 +228,7 @@ def process_finance_spreadsheet(r, group, quarter):
     gc = google.conn()
 
     fin = gc.open(finance.FINANCE_SPREADSHEET_NAME)
+    #fin = gc.open_by_key('0AobgMqwG6nlpdHdocFkwVVhNd2pGbTBRX1pCanBVdVE')
 
     # Fetch list of personal references from the finance spreadsheet
     # along with the current "Q4" section.
@@ -239,8 +240,8 @@ def process_finance_spreadsheet(r, group, quarter):
     )[finance.FIN_HEADER_ROW:]
 
     # TODO: Parameterise the selection of the current quarter.
-    q4_section = wks.col_values(
-        1 + headings.index('{} Sec'.format(quarter)))[finance.FIN_HEADER_ROW:]
+    #q4_section = wks.col_values(
+    #    1 + headings.index('{} Sec'.format(quarter)))[finance.FIN_HEADER_ROW:]
 
     group.set_yl_as_yp(False)
     all_yp = group.all_yp_members_without_senior_duplicates_dict()
@@ -265,6 +266,7 @@ def process_finance_spreadsheet(r, group, quarter):
         " on the Finance Spreadsheet. (New Members)")
     headings = [('Patrol', 'patrol'),
                 ('SeniorSection', 'SeniorSection'),
+                ('PersonalReference', 'customisable_data.PersonalReference'),
                 ('Membership', 'customisable_data.membershipno'),
                 ('Firstname', 'first_name'),
                 ('Lastname', 'last_name'),
@@ -314,172 +316,172 @@ def process_finance_spreadsheet(r, group, quarter):
 
     r.t_end()
 
-    # Create a list of all YP who are on the finanace list but are not
-    # in the same section in OSM.
-    section_map = {'Maclean': 'MP',
-                   'Rowallan': 'RP',
-                   'Somers': 'SP',
-                   'Swinfen': 'BC',
-                   'Garrick': 'GC',
-                   'Boswell': 'BT',
-                   'Johnson': 'JT',
-                   'Erasmus': 'ET',
-                   'Paget': 'PC'}
+    # # Create a list of all YP who are on the finanace list but are not
+    # # in the same section in OSM.
+    # section_map = {'Maclean': 'MP',
+    #                'Rowallan': 'RP',
+    #                'Somers': 'SP',
+    #                'Swinfen': 'BC',
+    #                'Garrick': 'GC',
+    #                'Boswell': 'BT',
+    #                'Johnson': 'JT',
+    #                'Erasmus': 'ET',
+    #                'Paget': 'PC'}
 
-    log.debug("fin_references - {}".format(fin_references))
-    log.debug("q_section - {}".format(q4_section))
+    # log.debug("fin_references - {}".format(fin_references))
+    # log.debug("q_section - {}".format(q4_section))
 
-    changed_members = []
-    for name, section_members in all_yp.items():
-        for member in section_members:
-            log.debug("member = {}".format(member))
-            if member[OSM_REF_FIELD] in fin_references:
-                try:
-                    previous_section = q4_section[fin_references.index(
-                        member[OSM_REF_FIELD])]
-                except IndexError:
-                    # If the spreadsheet does not have enough columns we assume that
-                    # the previous section was None: i.e. this is a new YP.
-                    previous_section = ""
+    # changed_members = []
+    # for name, section_members in all_yp.items():
+    #     for member in section_members:
+    #         log.debug("member = {}".format(member))
+    #         if member[OSM_REF_FIELD] in fin_references:
+    #             try:
+    #                 previous_section = q4_section[fin_references.index(
+    #                     member[OSM_REF_FIELD])]
+    #             except IndexError:
+    #                 # If the spreadsheet does not have enough columns we assume that
+    #                 # the previous section was None: i.e. this is a new YP.
+    #                 previous_section = ""
 
-                if section_map[name] != previous_section:
-                    changed_members.append((member,
-                                            previous_section,
-                                            section_map[name]))
+    #             if section_map[name] != previous_section:
+    #                 changed_members.append((member,
+    #                                         previous_section,
+    #                                         section_map[name]))
 
-    r.p("The following have moved sections on OSM but are "
-        "still recorded in their old section in the Finance "
-        "Spreadsheet (Changed members)")
-    r.t_start(["Membership", "Old", "New", "First", "Last"])
-    for member in changed_members:
-        r.t_row([
-            member[0][OSM_REF_FIELD],
-            member[1],
-            member[2],
-            all_members[member[0][OSM_REF_FIELD]]['first_name'],
-            all_members[member[0][OSM_REF_FIELD]]['last_name']])
+    # r.p("The following have moved sections on OSM but are "
+    #     "still recorded in their old section in the Finance "
+    #     "Spreadsheet (Changed members)")
+    # r.t_start(["Membership", "Old", "New", "First", "Last"])
+    # for member in changed_members:
+    #     r.t_row([
+    #         member[0][OSM_REF_FIELD],
+    #         member[1],
+    #         member[2],
+    #         all_members[member[0][OSM_REF_FIELD]]['first_name'],
+    #         all_members[member[0][OSM_REF_FIELD]]['last_name']])
 
-    r.t_end()
-
-
-def section_compass_check(r, group, section):
-    """Check the content of Compass for descrepencies with OSM
-    for a specific section."""
-
-    c = compass.Compass(outdir=os.path.abspath('compass_exports'))
-    c.load_from_dir()
-
-    group.set_yl_as_yp(True)
-    osm_members = group.section_yp_members_without_leaders(section)
-
-    r.sub_title('Compass')
-    r.p('The following records appear in OSM but do not appear in Compass. '
-        'This may be because their entry in Compass has a different Firstname '
-        'or Lastname.')
-
-    if section not in c.sections():
-        r.p('No Compass data available for Section: {}'.format(section))
-        return
-
-    members_missing_in_compass = [member for member in osm_members
-                                  if c.find_by_name(
-                                      member['firstname'],
-                                      member['lastname'],
-                                      section_wanted=section,
-                                      ignore_second_name=True).empty]
-
-    if len(members_missing_in_compass):
-        r.t_start(compass.required_headings)
-
-        # Find YP missing from Compass
-        for member in members_missing_in_compass:
-                compass_record = compass.member2compass(member, section)
-                r.t_row([compass_record[k] for k in compass.required_headings])
-        r.t_end()
-
-    r.p('The following records appear in Compass but do not appear in OSM. '
-        'This may be because the Firstname or Lastname is different.')
-
-    members_missing_in_osm = [
-        member for member in c.section_yp_members_without_leaders(section)
-        if not group.find_by_name(member['forenames'],
-                                  member['surname'],
-                                  section_wanted=section,
-                                  ignore_second_name=True)]
-
-    if len(members_missing_in_osm):
-        keys = members_missing_in_osm[0].keys()
-        r.t_start(keys)
-
-        for member in members_missing_in_osm:
-            r.t_row([member[k] for k in keys])
-
-        r.t_end()
+    # r.t_end()
 
 
-def process_compass(r, group):
-    "Check the content of Compass for descrepencies with OSM"
+# def section_compass_check(r, group, section):
+#     """Check the content of Compass for descrepencies with OSM
+#     for a specific section."""
 
-    c = compass.Compass(outdir=os.path.abspath('compass_exports'))
-    c.load_from_dir()
+#     c = compass.Compass(outdir=os.path.abspath('compass_exports'))
+#     c.load_from_dir()
 
-    group.set_yl_as_yp(True)
-    all_yp = group.all_yp_members_without_senior_duplicates_dict()
+#     group.set_yl_as_yp(True)
+#     osm_members = group.section_yp_members_without_leaders(section)
 
-    r.sub_title('Compass')
-    r.p('The following records appear in OSM but do not appear in Compass '
-        'This may be because their entry in Compass has a different Firstname '
-        'or Lastname.  Only the first part of the Firstname is taken in to account.')
+#     r.sub_title('Compass')
+#     r.p('The following records appear in OSM but do not appear in Compass. '
+#         'This may be because their entry in Compass has a different Firstname '
+#         'or Lastname.')
 
-    # Generate a dict of the sections with missing members.
-    members_missing_in_compass = {
-        s: [member for member in all_yp[s]
-            if c.find_by_name(
-                member['firstname'],
-                member['lastname'],
-                ignore_second_name=True).empty]
-        for s in all_yp.keys()}
+#     if section not in c.sections():
+#         r.p('No Compass data available for Section: {}'.format(section))
+#         return
 
-    # If the dict is not empty.
-    if list(itertools.chain(*members_missing_in_compass.values())):
-        r.t_start(['OSM section'] + list(compass.required_headings))
+#     members_missing_in_compass = [member for member in osm_members
+#                                   if c.find_by_name(
+#                                       member['firstname'],
+#                                       member['lastname'],
+#                                       section_wanted=section,
+#                                       ignore_second_name=True).empty]
 
-        for section, members in members_missing_in_compass.items():
-            for member in members:
-                compass_record = compass.member2compass(member, section)
-                r.t_row([section] + [compass_record[k]
-                                       for k in compass.required_headings])
-        r.t_end()
+#     if len(members_missing_in_compass):
+#         r.t_start(compass.required_headings)
 
-    r.p('The following records appear in Compass but do not appear in OSM '
-        'This may be because the Firstname or Lastname is different. Only '
-        'the first part of the Firstname is taken in to account.')
+#         # Find YP missing from Compass
+#         for member in members_missing_in_compass:
+#                 compass_record = compass.member2compass(member, section)
+#                 r.t_row([compass_record[k] for k in compass.required_headings])
+#         r.t_end()
 
-    r.t_start(['Compass Section', 'Membership', 'Firstname', 'Surname'])
+#     r.p('The following records appear in Compass but do not appear in OSM. '
+#         'This may be because the Firstname or Lastname is different.')
 
-    compass_sections = c.all_yp_members_dict()
-    for section in compass_sections.keys():
-        for i, member in compass_sections[section].iterrows():
-            if not group.find_by_name(member['forenames'],
-                                      member['surname'],
-                                      ignore_second_name=True):
-                r.t_row([section,
-                         member['membership_number'],
-                         member['forenames'],
-                         member['surname']])
+#     members_missing_in_osm = [
+#         member for member in c.section_yp_members_without_leaders(section)
+#         if not group.find_by_name(member['forenames'],
+#                                   member['surname'],
+#                                   section_wanted=section,
+#                                   ignore_second_name=True)]
 
-    r.t_end()
+#     if len(members_missing_in_osm):
+#         keys = members_missing_in_osm[0].keys()
+#         r.t_start(keys)
 
-    r.p('The following records appear more than once in Compass with different Membership numbers')
+#         for member in members_missing_in_osm:
+#             r.t_row([member[k] for k in keys])
 
-    r.t_start(['Membership', 'Firstname', 'Surname', 'Location'])
+#         r.t_end()
 
-    for member in c.members_with_multiple_membership_numbers():
-        r.t_row([member['membership_number'].values[0],
-                 member['forenames'].values[0],
-                 member['surname'].values[0],
-                 member['location'].values[0]])
-    r.t_end()
+
+# def process_compass(r, group):
+#     "Check the content of Compass for descrepencies with OSM"
+
+#     c = compass.Compass(outdir=os.path.abspath('compass_exports'))
+#     c.load_from_dir()
+
+#     group.set_yl_as_yp(True)
+#     all_yp = group.all_yp_members_without_senior_duplicates_dict()
+
+#     r.sub_title('Compass')
+#     r.p('The following records appear in OSM but do not appear in Compass '
+#         'This may be because their entry in Compass has a different Firstname '
+#         'or Lastname.  Only the first part of the Firstname is taken in to account.')
+
+#     # Generate a dict of the sections with missing members.
+#     members_missing_in_compass = {
+#         s: [member for member in all_yp[s]
+#             if c.find_by_name(
+#                 member['firstname'],
+#                 member['lastname'],
+#                 ignore_second_name=True).empty]
+#         for s in all_yp.keys()}
+
+#     # If the dict is not empty.
+#     if list(itertools.chain(*members_missing_in_compass.values())):
+#         r.t_start(['OSM section'] + list(compass.required_headings))
+
+#         for section, members in members_missing_in_compass.items():
+#             for member in members:
+#                 compass_record = compass.member2compass(member, section)
+#                 r.t_row([section] + [compass_record[k]
+#                                        for k in compass.required_headings])
+#         r.t_end()
+
+#     r.p('The following records appear in Compass but do not appear in OSM '
+#         'This may be because the Firstname or Lastname is different. Only '
+#         'the first part of the Firstname is taken in to account.')
+
+#     r.t_start(['Compass Section', 'Membership', 'Firstname', 'Surname'])
+
+#     compass_sections = c.all_yp_members_dict()
+#     for section in compass_sections.keys():
+#         for i, member in compass_sections[section].iterrows():
+#             if not group.find_by_name(member['forenames'],
+#                                       member['surname'],
+#                                       ignore_second_name=True):
+#                 r.t_row([section,
+#                          member['membership_number'],
+#                          member['forenames'],
+#                          member['surname']])
+
+#     r.t_end()
+
+#     r.p('The following records appear more than once in Compass with different Membership numbers')
+
+#     r.t_start(['Membership', 'Firstname', 'Surname', 'Location'])
+
+#     for member in c.members_with_multiple_membership_numbers():
+#         r.t_row([member['membership_number'].values[0],
+#                  member['forenames'].values[0],
+#                  member['surname'].values[0],
+#                  member['location'].values[0]])
+#     r.t_end()
 
 
 def census(r, group):
