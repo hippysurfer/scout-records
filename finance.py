@@ -1,4 +1,4 @@
-FINANCE_SPREADSHEET_NAME = "Copy of Simplified Membership Master List (Apr 2015 - Mar 2016)"
+FINANCE_SPREADSHEET_NAME = "Simplified Membership Master List (Apr 2015 - Mar 2016)"
 
 # Finance spreadsheet
 FIN_HEADER_ROW = 1
