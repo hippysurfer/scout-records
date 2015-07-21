@@ -56,7 +56,7 @@ class next_f:
         self._card = card
         self._last_f = n
 
-    def next_f(self, type_, label, value, label_type='X-ABLabel'):
+    def next_f(self, type_, label, value, label_type='X-ABLabel', pref=False):
         if not value:
             return
         self._last_f += 1
@@ -65,7 +65,10 @@ class next_f:
         i.value = label
         v = self._card.add(type_, item)
         if type_ == 'email':
-            v.type_paramlist = ['INTERNET']
+            if pref:
+                v.type_paramlist = ['INTERNET', 'pref']
+            else:
+                v.type_paramlist = ['INTERNET']
         v.encoded = True
         v.value = value
 
@@ -84,7 +87,13 @@ def add_base(next_, member, label, section, field_func=None):
         next_('tel', name, number)
 
     for _ in ['email1', 'email2']:
-        next_('email', label, f(_))
+        try:
+            pref = True if f("{}_leaders".format(_)) == "yes" else False
+        except KeyError:
+            pref = False
+
+        next_('email', label, f(_),
+              pref=pref)
 
     next_('adr', label,
           vo.vcard.Address(

@@ -305,11 +305,11 @@ class Badges(OSMObject):
 
 class Member(OSMObject):
 
-    def __init__(self, osm, section, accessor, column_map, record):
+    def __init__(self, osm, section, accessor, record, custom):
         OSMObject.__init__(self, osm, accessor, record)
 
         self._section = section
-        self._column_map = column_map
+        self._custom = custom
 
     def __str__(self):
         return "Member: \n Section = {!r}\n record = {}".format(
@@ -321,28 +321,20 @@ class Member(OSMObject):
         head, tail = key.split('.')
 
         group_id, columns = [(group['group_id'], group['columns'])
-                             for group in self._column_map
+                             for group in self._custom
                              if group['identifier'] == head][0]
 
         try:
-            field_id = [column['column_id'] for column
-                        in columns
-                        if column['varname'] == tail][0]
+            value = [column['value'] for column
+                     in columns
+                     if column['varname'] == tail][0]
         except:
-            field_id = [
-                column['column_id'] for column
+            value = [
+                column['value'] for column
                 in columns
                 if column['label'].lower().replace(" ", "") == tail.lower()][0]
 
-        # field = ""
-        # for k, v in self.__dict__['_record']['custom_data'].items():
-        #     if k == group_id:
-        #         for field_k, field_value in self.__dict__['_record']['custom_data'][k]:
-        #             if field_k == field_id:
-        #                 field = field_value
-        #                 break
-
-        return self.__dict__['_record']['custom_data'][str(group_id)][str(field_id)]
+        return value
 
     def __getattr__(self, key):
         try:
@@ -381,13 +373,23 @@ class Members(OSMObject):
     def __init__(self, osm, section, accessor, record):
         self._osm = osm,
         self._section = section
-        self._accessor = accessor,
+        self._accessor = accessor
         self._column_map = record['meta']['structure']
 
         members = {}
         for key, member in record['data'].items():
+            # Fetch detailed info for member.
+            url = "ext/customdata/?action=getData"
+            # "&section_id={}".format(self._section['sectionid'])
+            fields = {'section_id': self._section['sectionid'],
+                      'associated_id': key,
+                      'associated_type': 'member',
+                      'context': 'members'}
+
+            custom_data = self._accessor(url, fields=fields)
+
             members[key] = MemberClass(
-                osm, section, accessor, self._column_map, member)
+                osm, section, accessor, member, custom_data['data'])
 
         OSMObject.__init__(self, osm, accessor, members)
 
