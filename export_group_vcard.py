@@ -20,9 +20,9 @@ Options:
 
 import os.path
 import logging
-import datetime
 import itertools
 import socket
+import functools
 import smtplib
 from docopt import docopt
 import osm
@@ -33,6 +33,10 @@ from email.mime.text import MIMEText
 
 from group import Group, OSM_REF_FIELD
 from update import MAPPING
+
+from export_vcards import (
+    parse_tel, next_f, get,
+    member2vcard)
 
 log = logging.getLogger(__name__)
 
@@ -50,8 +54,8 @@ def send(to, subject, vcards, fro=FROM):
         msg['To'] = dest
 
         body = MIMEText(vcards, 'vcard')
-        body.add_header('Content-Disposition', 'attachment', 
-                        filename="group.vcf")    
+        body.add_header('Content-Disposition', 'attachment',
+                        filename="group.vcf")
         msg.attach(body)
 
         hostname = 'www.thegrindstone.me.uk' \
@@ -69,22 +73,6 @@ def send(to, subject, vcards, fro=FROM):
         s.quit()
 
 
-def parse_tel(number_field, default_name):
-    index = 0
-    for i in range(len(number_field)):
-        if number_field[i] not in ['0', '1', '2', '3', '4', '5',
-                                   '6', '7', '8', '9', ' ', '\t']:
-            index = i
-            break
-
-    number = number_field[:index].strip() if index != 0 else number_field
-    name = number_field[index:].strip() if index != 0 else default_name
-
-    #print("input = {}, index = {}, number = {}, name = {}".format(
-    #    number_field, index, number, name))
-
-    return number, name
-
 def member2vcards(member, section):
     """
     Create up to three vcards for each member entry.
@@ -94,196 +82,71 @@ def member2vcards(member, section):
     3. Mum
     """
 
-            
-    # Produce primary vcard
-    j = vo.vCard()
-    
-    uid = j.add('UID')
-    uid.value = "{}.OSM@thegrindstone.me.uk".format(
-        member['PersonalReference'])
-
-    j.add('n')
-    j.n.value = vo.vcard.Name(family=member['lastname'],
-                              given=member['firstname'])
-    j.add('fn')
-    j.fn.value = '{} {}'.format(member['firstname'],
-                                member['lastname'])
-
-    item1 = j.add('X-ABLabel', 'item1')
-    item1.value = 'Personal'
-    pe = j.add('email', 'item1')
-    pe.value = member['PersonalEmail']
-    pe.type_paramlist = ['INTERNET', 'pref']
-
-    org = j.add('org')
-    org.value = [section, ]
-
-    number, name = parse_tel(member['PersonalMob'],
-                             'Personal Mob')
-    item4 = j.add('X-ABLabel', 'item4')
-    item4.value = name
-    ptel = j.add('tel', 'item4')
-    ptel.value = number
-
-    number, name = parse_tel(member['MumMob' if section != 'Adult'
-                                    else 'NOKMob1'],
-                             'Mum Mob' if section != 'Adult' else 'NOK Mob1')
-    item5 = j.add('X-ABLabel', 'item5')
-    item5.value = name
-    mtel = j.add('tel', 'item5')
-    mtel.value = number
-
-    number, name = parse_tel(member['DadMob' if section != 'Adult'
-                                    else 'NOKMob2'],
-                             'Dad Mob' if section != 'Adult' else 'NOK Mob2')
-    item6 = j.add('X-ABLabel', 'item6')
-    item6.value = name
-    dtel = j.add('tel', 'item6')
-    dtel.value = number
-
-    item7 = j.add('X-ABLabel', 'item7')
-    item7.value = 'Primary Address'
-    addr = j.add('adr', 'item7')
-    addr.value = vo.vcard.Address(street=member['PrimaryAddress'])
-
-    item8 = j.add('X-ABLabel', 'item8')
-    item8.value = 'Secondary Address' \
-                  if section != 'Adult' else 'NOK Address 1'
-    addr = j.add('adr', 'item8')
-    addr.value = vo.vcard.Address(
-        street=member['SecondaryAddress'
-                      if section != 'Adult' else 'NOKAddress1'])
-
-    number, name = parse_tel(member['HomeTel'],
-                             'Home')
-    item9 = j.add('X-ABLabel', 'item9')
-    item9.value = name
-    htel = j.add('tel', 'item9')
-    htel.value = number
-
-
-    bday = j.add('bday')
-    bday.value = datetime.datetime.strptime(
-        member['dob'], '%d/%m/%Y').strftime('%Y-%m-%d')
-
-    cat = j.add('CATEGORIES')
-
-    note = j.add('note')
-    if section == 'Adult':
-        note.value = "NOKs: {}\nMedical: {}\nNotes: {}\nSection: {}\n".format(
-            member['NextofKinNames'], member['Medical'], member['Notes'], section)
-        cat.value = ("7th", "7th Adult")
-    elif member.get('Patrol','') == 'Leaders':
-        note.value = "NOKs: {}\nMedical: {}\nNotes: {}\nRole:{}\nSection: {}\n".format(
-            member['DadsName'], member['Medical'], member['Notes'], member.get('Patrol',''), section)
-        cat.value = ("7th", "7th Section Leader")
-    else:
-        cat.value = ("7th", "7th YP")
-        note.value = "Parents: Dad - {} / Mum - {}\nMedical: {}\nNotes: {}\nPatrol:{}\nSection: {}\n".format(
-            member['DadsName'], member['MumsName'], member['Medical'], 
-            member['Notes'], member.get('Patrol',''), section)
-
-
-    ret = [j.serialize(), ]
+    ret = [member2vcard(member, section)]
 
     # No need to continue if we are doing an adult.
 
-    if section == 'Adult' or member.get('Patrol','') == 'Leaders':
+    if section == 'Adult' or (
+            member.get('Patrol', '') == 'Leaders' and
+            int(member.age().days / 365) > 18):
         return ret
 
+    for parent in ['contact_primary_1', 'contact_primary_2']:
+        f = functools.partial(get, member=member, section=parent)
 
-    # Try to work out the parents entries.
+        full_name = "{} {}".format(f('firstname'),
+                                   f('lastname'))
 
-    # If it is not empty and there is an email address for Dad 
-    # we assume that it is dad, otherwise we assume it is Mum
+        if full_name.strip() != '':
+            ret += [process_parent(full_name, member, section, f), ]
 
-    if (  ):
-        dad = member['DadsName'].strip()
-        mum = None
-    elif ( member['parents'].strip() != '' and
-           member['MumEmail'].strip() != '' ):
-        mum = member['parents'].strip()
-        dad = None
-    else:
-        mum = None
-        dad = None
-
-    if member['DadsName'].strip() != '':
-        ret += [process_parent(member, 
-                               member['DadsName'],
-                               member['DadEmail'],
-                               member['DadMob'],
-                               section),]
-
-    if member['MumsName'].strip() != '':
-        ret += [process_parent(member,
-                               member['MumsName'],
-                               member['MumEmail'],
-                               member['MumMob'],
-                               section),]
-    
     return ret
 
-def process_parent(member, parent, email, mob, section):
 
-    # Try to add surname if is missing.
-    if not len(parent.strip().split(" ")) > 1:
-        parent = "{} {}".format(parent, member['lastname'].strip())
-        
+def process_parent(name, member, section, f):
+
+    # If the name does not appear to have lastname part
+    # add it from the member name.
+    if len(name.strip().split(' ')) < 2:
+        name = "{} {}".format(name.strip(), member['last_name'])
+
     j = vo.vCard()
-    
+
     uid = j.add('UID')
     uid.value = "{}{}.OSM@thegrindstone.me.uk".format(
-        parent.replace(" ",""),
-        member['PersonalReference'])
+        name.replace(" ", ""),
+        member[OSM_REF_FIELD])
 
     j.add('n')
-    j.n.value = vo.vcard.Name(family=parent.split(' ', 1)[1].strip(),
-                              given=parent.split(' ')[0].strip())
+    j.n.value = vo.vcard.Name(
+        family=f('lastname') if f('lastname').strip() else member['last_name'],
+        given=f('firstname'))
     j.add('fn')
-    j.fn.value = '{} {}'.format(parent.split(' ')[0].strip(),
-                                parent.split(' ', 1)[1].strip())
+    j.fn.value = name
 
-    item1 = j.add('X-ABLabel', 'item1')
-    item1.value = 'Personal'
-    pe = j.add('email', 'item1')
-    pe.value = email
-    pe.type_paramlist = ['INTERNET', 'pref']
+    next_ = next_f(j, 0).next_f
+
+    for _ in ['phone1', 'phone2']:
+        number, name = parse_tel(f(_), _)
+        next_('tel', name, number)
+
+    for _ in ['email1', 'email2']:
+        next_('email', _, f(_))
+
+    next_('adr', 'Primary',
+          vo.vcard.Address(
+              street=f('address1'),
+              city=f('address2'),
+              region=f('address3'),
+              country=f('address4'),
+              code=f('postcode')))
 
     org = j.add('org')
     org.value = [section, ]
 
-    number, name = parse_tel(mob,
-                             'Personal Mob')
-    item4 = j.add('X-ABLabel', 'item4')
-    item4.value = name
-    ptel = j.add('tel', 'item4')
-    ptel.value = number
-
-    item7 = j.add('X-ABLabel', 'item7')
-    item7.value = 'Primary Address'
-    addr = j.add('adr', 'item7')
-    addr.value = vo.vcard.Address(street=member['PrimaryAddress'])
-
-    item8 = j.add('X-ABLabel', 'item8')
-    item8.value = 'Secondary Address' \
-                  if section != 'Adult' else 'NOK Address 1'
-    addr = j.add('adr', 'item8')
-    addr.value = vo.vcard.Address(
-        street=member['SecondaryAddress'
-                      if section != 'Adult' else 'NOKAddress1'])
-
-    number, name = parse_tel(member['HomeTel'],
-                             'Home')
-    item9 = j.add('X-ABLabel', 'item9')
-    item9.value = name
-    htel = j.add('tel', 'item9')
-    htel.value = number
-
-
     note = j.add('note')
     note.value = "Child: {} {} ({})\n".format(
-        member['firstname'], member['lastname'], section)
+        member['first_name'], member['last_name'], section)
 
     cat = j.add('CATEGORIES')
     cat.value = ("7th", "7th Lichfield Parent")
@@ -307,14 +170,13 @@ def _main(osm, auth, sections, outdir, email, term):
         section_vcards = [member2vcards(member, section) for
                           member in group.section_all_members(section)]
 
-
-        # flatten list of lists.
+        #  flatten list of lists.
         vcards += list(itertools.chain(*section_vcards))
 
     open(os.path.join(outdir, "group.vcf"), 'w').writelines(vcards)
 
     if email:
-        send([email,], "OSM Group vcards", "".join(vcards))
+        send([email, ], "OSM Group vcards", "".join(vcards))
 
 if __name__ == '__main__':
 

@@ -31,6 +31,9 @@ import uuid
 
 from owncloud_accounts import ACCOUNTS
 
+import requests.packages.urllib3
+requests.packages.urllib3.disable_warnings()
+
 
 def _main(sections, vcard_dir):
     assert os.path.exists(vcard_dir) and os.path.isdir(vcard_dir)
@@ -58,6 +61,7 @@ def _main(sections, vcard_dir):
         dav = PyCardDAV(url, user=user, passwd=passwd,
                         write_support=True, auth='basic',
                         verify=False)
+
 
         abook = dav.get_abook()
         nCards = len(abook.keys())

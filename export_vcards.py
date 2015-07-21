@@ -153,14 +153,30 @@ def member2vcard(member, section):
 
     note = j.add('note')
 
+    cat = j.add('CATEGORIES')
+
     if section == 'Adult':
-        note.value = "NOKs: {} / {}\nMedical: {}\nNotes: {}\n".format(
-            parent1, parent2, medical, notes
+        note.value = "NOKs: {} / {}\nMedical: {}\nNotes: {}\nSection: {}\n".format(
+            parent1, parent2, medical, notes, section
         )
+        cat.value = ('7th', '7th Adult', '7th {}'.format(section))
+    elif member.get('patrol', '') == 'Leaders':
+        if int(member.age().days / 365) > 18:
+            note.value = "NOKs: {} / {}\nMedical: {}\nNotes: {}\nRole: {}\nSection: {}\n".format(
+                parent1, parent2, medical, notes, member.get('patrol', ''), section
+            )
+            cat.value = ('7th', '7th Section Leader', '7th {} Leader'.format(section))
+        else:
+            note.value = "Parents: {} / {}\nMedical: {}\nNotes: {}\nPatrol: {}\nSection: {}\n".format(
+                parent1, parent2, medical, notes, member.get('patrol', ''), section
+            )
+            cat.value = ('7th', '7th YL', '7th {} YL'.format(section))
+            
     else:
-        note.value = "Parents: {} / {}\nMedical: {}\nNotes: {}\n".format(
-            parent1, parent2, medical, notes
+        note.value = "Parents: {} / {}\nMedical: {}\nNotes: {}\nPatrol: {}\nSection: {}\n".format(
+            parent1, parent2, medical, notes, member.get('patrol', ''), section
         )
+        cat.value = ('7th', '7th YP', '7th {} YP'.format(section))
 
     return j.serialize()
 
