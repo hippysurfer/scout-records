@@ -58,9 +58,7 @@ def send(to, subject, vcards, fro=FROM):
                         filename="group.vcf")
         msg.attach(body)
 
-        hostname = 'www.thegrindstone.me.uk' \
-            if not socket.gethostname() == 'rat' \
-            else 'localhost'
+        hostname = 'localhost'
 
         s = smtplib.SMTP(hostname)
 
