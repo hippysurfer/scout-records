@@ -20,6 +20,7 @@ Options:
 import os.path
 import logging
 import datetime
+import functools
 from docopt import docopt
 import osm
 import vobject as vo
@@ -49,102 +50,117 @@ def parse_tel(number_field, default_name):
 
     return number, name
 
+
+class next_f:
+    def __init__(self, card, n=0):
+        self._card = card
+        self._last_f = n
+
+    def next_f(self, type_, label, value, label_type='X-ABLabel'):
+        if not value:
+            return
+        self._last_f += 1
+        item = "item{}".format(self._last_f)
+        i = self._card.add(label_type, item)
+        i.value = label
+        v = self._card.add(type_, item)
+        if type_ == 'email':
+            v.type_paramlist = ['INTERNET']
+        v.encoded = True
+        v.value = value
+
+
+def get(field, member, section):
+    return member["{}.{}".format(section, field)]
+
+
+def add_base(next_, member, label, section, field_func=None):
+    f = field_func if field_func else functools.partial(get, 
+                                                        member=member, 
+                                                        section=section)
+
+    for _ in ['phone1', 'phone2']:
+        number, name = parse_tel(f(_), label)
+        next_('tel', name, number)
+
+    for _ in ['email1', 'email2']:
+        next_('email', label, f(_))
+
+    next_('adr', label,
+          vo.vcard.Address(
+              street=f('address1'),
+              city=f('address2'),
+              region=f('address3'),
+              country=f('address4'),
+              code=f('postcode')))
+
+
+def add_contact(next_, member, label, section):
+    f = functools.partial(get, member=member, section=section)
+
+    full_name = "{} {} ({})".format(f('firstname'),
+                                    f('lastname'),
+                                    label)
+
+    add_base(next_, member, full_name, section, f)
+
+
 def member2vcard(member, section):
     j = vo.vCard()
-    
+
     uid = j.add('UID')
     uid.value = "{}.OSM@thegrindstone.me.uk".format(
-        member['PersonalReference'])
+        member[OSM_REF_FIELD])
 
     j.add('n')
-    j.n.value = vo.vcard.Name(family=member['lastname'],
-                              given=member['firstname'])
+    j.n.value = vo.vcard.Name(family=member['last_name'],
+                              given=member['first_name'])
     j.add('fn')
-    j.fn.value = '{} {}'.format(member['firstname'],
-                                member['lastname'])
+    j.fn.value = '{} {}'.format(member['first_name'],
+                                member['last_name'])
 
-    item1 = j.add('X-ABLabel', 'item1')
-    item1.value = 'Personal'
-    pe = j.add('email', 'item1')
-    pe.value = member['PersonalEmail']
-    pe.type_paramlist = ['INTERNET', 'pref']
+    next_ = next_f(j, 0).next_f
 
-    item2 = j.add('X-ABLabel', 'item2')
-    item2.value = 'Mum' if section != 'Adult' else "NOK"
-    me = j.add('email', 'item2')
-    me.value = member['MumEmail' if section != 'Adult' else 'NOKEmail1']
-    me.type_param = 'INTERNET'
-
-    item3 = j.add('X-ABLabel', 'item3')
-    item3.value = 'Dad' if section != 'Adult' else 'NOK2'
-    de = j.add('email', 'item3')
-    de.value = member['DadEmail' if section != 'Adult' else 'NOKEmail2']
-    de.type_param = 'INTERNET'
+    add_base(next_, member,
+                'Member' if section != 'Adult' else 'NOK1',
+                'contact_primary_member')
+    add_contact(next_, member,
+                'Parent1' if section != 'Adult' else 'NOK1',
+                'contact_primary_1')
+    add_contact(next_, member,
+                'Parent2' if section != 'Adult' else 'NOK2',
+                'contact_primary_2')
+    add_contact(next_, member, 'Emergency', 'emergency')
 
     org = j.add('org')
     org.value = [section, ]
 
-    number, name = parse_tel(member['PersonalMob'],
-                             'Personal Mob')
-    item4 = j.add('X-ABLabel', 'item4')
-    item4.value = name
-    ptel = j.add('tel', 'item4')
-    ptel.value = number
-
-    number, name = parse_tel(member['MumMob' if section != 'Adult'
-                                    else 'NOKMob1'],
-                             'Mum Mob' if section != 'Adult' else 'NOK Mob1')
-    item5 = j.add('X-ABLabel', 'item5')
-    item5.value = name
-    mtel = j.add('tel', 'item5')
-    mtel.value = number
-
-    number, name = parse_tel(member['DadMob' if section != 'Adult'
-                                    else 'NOKMob2'],
-                             'Dad Mob' if section != 'Adult' else 'NOK Mob2')
-    item6 = j.add('X-ABLabel', 'item6')
-    item6.value = name
-    dtel = j.add('tel', 'item6')
-    dtel.value = number
-
-    item7 = j.add('X-ABLabel', 'item7')
-    item7.value = 'Primary Address'
-    addr = j.add('adr', 'item7')
-    addr.value = vo.vcard.Address(street=member['PrimaryAddress'])
-
-    item8 = j.add('X-ABLabel', 'item8')
-    item8.value = 'Secondary Address' \
-                  if section != 'Adult' else 'NOK Address 1'
-    addr = j.add('adr', 'item8')
-    addr.value = vo.vcard.Address(
-        street=member['SecondaryAddress'
-                      if section != 'Adult' else 'NOKAddress1'])
-
-    number, name = parse_tel(member['HomeTel'],
-                             'Home')
-    item9 = j.add('X-ABLabel', 'item9')
-    item9.value = name
-    htel = j.add('tel', 'item9')
-    htel.value = number
-
-    if section == 'Adult':
-        item10 = j.add('X-ABLabel', 'item10')
-        item10.value = 'NOK Address 2'
-        addr = j.add('adr', 'item10')
-        addr.value = vo.vcard.Address(
-            street=member['NOKAddress2'])
-
     bday = j.add('bday')
     bday.value = datetime.datetime.strptime(
-        member['dob'], '%d/%m/%Y').strftime('%Y-%m-%d')
+        member['date_of_birth'], '%Y-%m-%d').strftime('%Y-%m-%d')
+
+    f = functools.partial(get, member=member, section='contact_primary_1')
+    parent1 = "{} {}".format(f('firstname'),
+                             f('lastname'))
+
+    f = functools.partial(get, member=member, section='contact_primary_2')
+    parent2 = "{} {}".format(f('firstname'),
+                             f('lastname'))
+
+    f = functools.partial(get, member=member, section='customisable_data')
+    medical = f('medical')
+    notes = f('notes')
 
     note = j.add('note')
+
     if section == 'Adult':
-        note.value = "NOKs: {}\nMedical: {}\nNotes: {}\n".format(
-            member['NextofKinNames'], member['Medical'], member['Notes'])
+        note.value = "NOKs: {} / {}\nMedical: {}\nNotes: {}\n".format(
+            parent1, parent2, medical, notes
+        )
     else:
-        note.value = "Parents: Dad - {} Mum - {}\nMedical: {}\nNotes: {}\n".format(
-            member['DadsName'], member['MumsName'], member['Medical'], member['Notes'])
+        note.value = "Parents: {} / {}\nMedical: {}\nNotes: {}\n".format(
+            parent1, parent2, medical, notes
+        )
 
     return j.serialize()
 
