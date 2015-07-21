@@ -185,7 +185,7 @@ if __name__ == '__main__':
     if args['--debug']:
         level = logging.DEBUG
     else:
-        level = logging.INFO
+        level = logging.WARN
 
     if args['--term'] in [None, 'current']:
         args['--term'] = None

@@ -204,7 +204,7 @@ if __name__ == '__main__':
     if args['--debug']:
         level = logging.DEBUG
     else:
-        level = logging.INFO
+        level = logging.WARN
 
     logging.basicConfig(level=level)
     log.debug("Debug On\n")
