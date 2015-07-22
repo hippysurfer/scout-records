@@ -21,8 +21,7 @@ Options:
 from docopt import docopt
 
 import sys
-import requests
-import pickle
+import requests_cache
 import logging
 import datetime
 import dateutil.tz
@@ -63,13 +62,6 @@ class OSMObject(collections.MutableMapping):
         self._accessor = accessor
         self._record = record
 
-    # def __getattr__(self, key):
-    #     try:
-    #         return self._record[key]
-    #     except:
-    #         raise AttributeError("%r object has no attribute %r" %
-    #                              (type(self).__name__, key))
-
     def __getitem__(self, key):
         try:
             return self._record[key]
@@ -101,51 +93,15 @@ class OSMObject(collections.MutableMapping):
 
 
 class Accessor(object):
-    __cache__ = {}
-    _cache_hits = 0
-    _cache_misses = 0
 
     BASE_URL = "https://www.onlinescoutmanager.co.uk/"
 
     def __init__(self, authorisor):
         self._auth = authorisor
-
-    @classmethod
-    def clear_cache(cls):
-        cls.__cache__ = {}
-
-    @classmethod
-    def __cache_save__(cls, cache_file):
-        log.info("Saving cache: (hits = {}, misses = {})".format(
-            cls._cache_hits, cls._cache_misses))
-        pickle.dump(cls.__cache__, cache_file)
-
-    @classmethod
-    def __cache_load__(cls, cache_file):
-        cls.__cache__ = pickle.load(cache_file)
-        # log.debug("Cache content: {}".format(repr(cls.__cache__)))
-
-    @classmethod
-    def __cache_lookup__(cls, url, data):
-        # The values need to be in order so that lookups will match.
-        k = url + "&".join(
-            ["{}={}".format(key, data[key]) for key in sorted(data.keys())])
-        log.debug("Cache lookup: {} in \n {}".format(
-            k, "\n".join(cls.__cache__.keys())))
-        if k in cls.__cache__:
-            log.debug('Cache hit')
-            cls._cache_hits += 1
-            return cls.__cache__[k]
-
-        cls._cache_misses += 1
-
-        return None
-
-    @classmethod
-    def __cache_set__(cls, url, data, value):
-        k = url + "&".join(
-            ["{}={}".format(key, data[key]) for key in sorted(data.keys())])
-        cls.__cache__[k] = value
+        self._session = requests_cache.CachedSession(
+            '.osm_request_cache',
+            allowable_methods=('GET', 'POST'),
+            include_get_headers=True)
 
     def __call__(self, query, fields=None, authorising=False,
                  clear_cache=False, debug=False):
@@ -164,37 +120,25 @@ class Accessor(object):
         if fields:
             values.update(fields)
 
-        obj = self.__class__.__cache_lookup__(url, values)
+        try:
+            result = self._session.post(url, data=values)
+        except:
+            log.error("urlopen failed: {0}, {1}".format(
+                url, repr(values)))
+            raise
 
-        if not obj:
-            try:
-                result = requests.post(url, data=values)
-            except:
-                log.error("urlopen failed: {0}, {1}".format(
-                    url, repr(values)))
-                raise
+        if result.status_code != 200:
+            log.error("urlopen failed with status code {}: {}, {}".format(
+                result.status_code, url, repr(values)))
 
-            if result.status_code != 200:
-                log.error("urlopen failed with status code {}: {}, {}".format(
-                    result.status_code, url, repr(values)))
-
-            # Crude test to see if the response is JSON
-            # OSM returns a string as an error case.
-            try:
-                obj = result.json()
-            except:
-                log.warn("Result not JSON because: {0} not in "
-                         "('[', '{{')".format(result.text))
-                raise OSMException(url, values, result)
-
-            # if 'error' in obj:
-            #     log.warn("Error in JSON obj: {0} {1}".format(url, values))
-            #     raise OSMException(url, values, obj['error'])
-            # if 'err' in obj:
-            #     log.warn("Err in JSON obj: {0} {1}".format(url, values))
-            #     raise OSMException(url, values, obj['err'])
-
-            self.__class__.__cache_set__(url, values, obj)
+        # Crude test to see if the response is JSON
+        # OSM returns a string as an error case.
+        try:
+            obj = result.json()
+        except:
+            log.warn("Result not JSON because: {0} not in "
+                     "('[', '{{')".format(result.text))
+            raise OSMException(url, values, result)
 
         if debug:
             log.debug(pp.pformat(obj))
