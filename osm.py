@@ -101,7 +101,8 @@ class Accessor(object):
         self._session = requests_cache.CachedSession(
             '.osm_request_cache',
             allowable_methods=('GET', 'POST'),
-            include_get_headers=True)
+            include_get_headers=True,
+            expire_after=60*60)
 
     def __call__(self, query, fields=None, authorising=False,
                  clear_cache=False, debug=False):
@@ -341,6 +342,87 @@ class Members(OSMObject):
 class Event(OSMObject):
 
     def __init__(self, osm, section, accessor, record):
+        self._osm = osm,
+        self._section = section
+        self._accessor = accessor
+        OSMObject.__init__(self, osm, accessor, record)
+
+        self._attendees = None
+        self._fieldmap = None
+
+    @property
+    def fieldmap(self):
+        if not self._fieldmap:
+            raw = self._get_fieldmap(self._osm,
+                                     self._section,
+                                     self._accessor)
+
+            rows = [x['rows'] for x in raw]
+            flat = [i for j in rows for i in j]
+            self._fieldmap = [(d['name'], d['field']) for d in flat]
+            self._fieldmap = [_ for _ in self._fieldmap if _[0].strip() != ""]
+        return self._fieldmap
+
+    @property
+    def attendees(self):
+        if not self._attendees:
+            self._attendees = self._get_attendees(self._osm,
+                                                  self._section,
+                                                  self._accessor)
+        return self._attendees
+
+    def _get_fieldmap(self, osm, section, accessor):
+        url = "ext/events/event/?action=getStructureForEvent" \
+              "&sectionid={0}" \
+              "&termid={1}" \
+              "&eventid={2}" \
+            .format(section['sectionid'],
+                    section.term['termid'],
+                    self['eventid'])
+
+        return accessor(url)['structure']
+
+    def _get_attendees(self, osm, section, accessor):
+        url = "ext/events/event/?action=getAttendance" \
+              "&sectionid={0}" \
+              "&termid={1}" \
+              "&eventid={2}" \
+            .format(section['sectionid'],
+                    section.term['termid'],
+                    self['eventid'])
+
+        return accessor(url)['items']
+
+    def __str__(self):
+        return "{} - {} - {}".format(
+            self['name'],
+            self['date'],
+            self['location']
+        )
+
+
+class Events(collections.Sequence):
+
+    def __init__(self, osm, section, accessor, record):
+        if record:
+            self._events = [Event(osm, section, accessor, _)
+                            for _ in record['items']]
+        else:
+            self._events = []
+
+    def __getitem__(self, indx):
+        return self._events[indx]
+
+    def __len__(self):
+        return len(self._events)
+
+    def get_by_name(self, name):
+        return [_ for _ in self._events if _['name'] == name][0]
+
+
+class Meeting(OSMObject):
+
+    def __init__(self, osm, section, accessor, record):
         OSMObject.__init__(self, osm, accessor, record)
 
         self.meeting_date = datetime.datetime.strptime(
@@ -382,8 +464,8 @@ class Programme(OSMObject):
                 for event in record['items']:
                     events["{} - {}".format(
                         event['title'],
-                        event['meetingdate'])] = Event(osm, section,
-                                                       accessor, event)
+                        event['meetingdate'])] = Meeting(osm, section,
+                                                         accessor, event)
             except:
                 log.warn("Failed to process events in programme for "
                          "section: {0}\n"
@@ -457,7 +539,6 @@ class Section(OSMObject):
 
         log.debug("Configured term = {}".format(self.term))
 
-
         try:
             self.members = self._get_members()
         except:
@@ -477,6 +558,13 @@ class Section(OSMObject):
                 log.warn("Failed to get programme for section {0}"
                          .format(self['sectionname']),
                          exc_info=True)
+
+        try:
+            self.events = self._get_events()
+        except:
+            log.warn("Failed to get events for section {0}"
+                     .format(self['sectionname']),
+                     exc_info=True)
 
     def __repr__(self):
         return 'Section({0}, "{1}", "{2}")'.format(
@@ -501,6 +589,16 @@ class Section(OSMObject):
     def events(self):
         pass
 
+    def _get_events(self):
+        url = "ext/events/summary/?action=get" \
+              "&sectionid={0}" \
+              "&termid={1}" \
+            .format(self['sectionid'],
+                    self.term['termid'])
+
+        return Events(self._osm, self, self._accessor,
+                      self._accessor(url))
+        
     def _get_members(self):
         url = "ext/members/contact/grid/?action=getMembers" \
               "&section_id={0}" \
