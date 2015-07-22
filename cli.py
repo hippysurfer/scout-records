@@ -2,13 +2,14 @@
 """OSM Command Line
 
 Usage:
-   cli <apiid> <token> <section> contacts list
-   cli <apiid> <token> <section> events list
-   cli <apiid> <token> <section> events <event> attendees [--csv]
-   cli <apiid> <token> <section> events <event> info
+   cli [options] <apiid> <token> <section> contacts list
+   cli [options] <apiid> <token> <section> events list
+   cli [options] <apiid> <token> <section> events <event> attendees
+   cli [options] <apiid> <token> <section> events <event> info
 
 Options:
-   --csv   Output in CSV format
+   -a, --attending  Only list those that are attending.
+   -c, --csv        Output in CSV format.
 
 """
 
@@ -50,14 +51,21 @@ def events_info(osm, auth, section, event, term=None):
     print(",".join([ev[_] for _ in ['name', 'startdate', 'enddate', 'location']]))
 
 
-def events_attendees(osm, auth, section, event, term=None, csv=False):
+def events_attendees(osm, auth, section, event,
+                     term=None, csv=False, attending_only=False):
     group = Group(osm, auth, MAPPING.keys(), term)
 
     ev = group._sections.sections[
         Group.SECTIONIDS[section]].events.get_by_name(event)
     attendees = ev.attendees
     mapping = ev.fieldmap
-    output = ([str(attendee[_[1]]) for _ in mapping] for attendee in attendees)
+    if attending_only:
+        output = ([str(attendee[_[1]]) for _ in mapping]
+                  for attendee in attendees
+                  if attendee['attending'] == "Yes")
+    else:
+        output = ([str(attendee[_[1]]) for _ in mapping]
+                  for attendee in attendees)
     headers = (_[0] for _ in mapping)
     if csv:
         w = csv_writer(sys.stdout)
@@ -86,7 +94,8 @@ if __name__ == '__main__':
         elif args['attendees']:
             events_attendees(osm, auth, args['<section>'],
                              args['<event>'],
-                             csv=args['--csv'])
+                             csv=args['--csv'],
+                             attending_only=args['--attending'])
         elif args['info']:
             events_info(osm, auth, args['<section>'], args['<event>'])
         else:
