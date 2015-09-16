@@ -35,7 +35,8 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 from group import Group
-from update import MAPPING, OSM_REF_FIELD
+from update import MAPPING
+from group import OSM_REF_FIELD
 import finance
 import google
 #import compass

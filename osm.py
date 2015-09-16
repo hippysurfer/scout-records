@@ -299,9 +299,12 @@ class Member(OSMObject):
             try:
                 return self.lookup(key)
             except:
-                raise KeyError("{!r} object has no attribute {!r}:"
+                log.debug(pp.pformat(self.__dict__['_record']))
+                log.debug(pp.pformat(self._custom))
+                raise KeyError("{!r} object has no attribute {!r}: "
                                "".format(
-                                   type(self).__name__, key))
+                                   type(self).__name__, key,
+                                   ))
 
     def get_badges(self):
         "Return a list of badges objects for this member."
