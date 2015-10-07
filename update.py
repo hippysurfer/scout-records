@@ -296,8 +296,6 @@ def delete_members(spread, references, wks=YP_WKS):
         move_row(reference, wks, del_wks)
 
 
-
-
 def process_adults(group, spread):
 
     log.info("Processing adults...")
@@ -383,7 +381,7 @@ def process_yp(group, spread):
     all_references = []
     for name, section_members in all_yp_members.items():
         all_references.extend([member[OSM_REF_FIELD]
-                              for member in section_members])
+                               for member in section_members])
 
     # get list of references on Master wks
     wks = spread.worksheet(YP_WKS)
@@ -425,9 +423,9 @@ if __name__ == '__main__':
     logging.basicConfig(level=level)
     log.debug("Debug On\n")
 
-    #try:
+    # try:
     #    osm.Accessor.__cache_load__(open(DEF_CACHE, 'rb'))
-    #except:
+    # except:
     #    log.warn("Failed to load cache file\n")
 
     if args['-a']:
@@ -444,8 +442,8 @@ if __name__ == '__main__':
     #     creds = ('username','password')
     gc = google.conn()
 
-    #try:
+    # try:
     #    _main(osm, gc)
-    #finally:
+    # finally:
     #    osm.Accessor.__cache_save__(open(DEF_CACHE, 'wb'))
     _main(osm, gc, auth)

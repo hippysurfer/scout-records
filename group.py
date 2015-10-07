@@ -4,7 +4,7 @@ import osm
 
 log = logging.getLogger(__name__)
 
-#OSM_REF_FIELD = 'customisable_data.membershipno'
+# OSM_REF_FIELD = 'customisable_data.membershipno'
 OSM_REF_FIELD = 'customisable_data.PersonalReference'
 
 
@@ -30,7 +30,7 @@ class Group(object):
                   'Garrick': '20711',
                   'Erasmus': '20707',
                   'Somers': '20706'}
-                   #'Waiting List': ""}
+    # 'Waiting List': ""}
 
     ADULT_SECTION = 'Adult'
 
@@ -47,7 +47,7 @@ class Group(object):
     def __init__(self, osm, auth, important_fields, term=None):
         self._osm = osm
         self._important_fields = important_fields
-        self._sections = self._osm.OSM(auth, self.SECTIONIDS.values(), 
+        self._sections = self._osm.OSM(auth, self.SECTIONIDS.values(),
                                        term)
         self.include_yl_as_yp = False
 
@@ -92,7 +92,7 @@ class Group(object):
         return {'Paget': self.remove_senior_duplicates('Paget',
                                                        self.all_cubs()),
                 'Swinfen': self.remove_senior_duplicates('Swinfen',
-                                                       self.all_cubs()),
+                                                         self.all_cubs()),
                 'Maclean': self.remove_senior_duplicates('Maclean',
                                                          self.all_scouts()),
                 'Rowallan': self.remove_senior_duplicates('Rowallan',
@@ -107,7 +107,7 @@ class Group(object):
 
         return {s: self.section_all_members(s) for
                 s in self.YP_SECTIONS}
-                                                    
+
     def section_missing_references(self, section_name):
         return self._section_missing_references(section_name)
 
@@ -118,7 +118,7 @@ class Group(object):
     def get_yp_patrol_exclude_list(self):
         l = ['leaders', 'winter adv.']
         if self.include_yl_as_yp:
-            l += ['young leaders',]
+            l += ['young leaders', ]
         return l
 
     def section_yp_members_without_leaders(self, section):
@@ -163,10 +163,10 @@ class Group(object):
         return self.section_yp_members_without_leaders('Johnson') +\
             self.section_yp_members_without_leaders('Boswell') +\
             self.section_yp_members_without_leaders('Erasmus')
-        
+
     def find_ref_in_sections(self, reference):
         """Search for a reference in all of the sections.
-        
+
         return a list of section names."""
 
         matching_sections = []
@@ -191,8 +191,10 @@ class Group(object):
                 if ignore_second_name:
                     osm_firstname = osm_firstname.split(' ')[0]
                     firstname = firstname.split(' ')[0]
-                if (osm_firstname.lower().strip() == firstname.lower().strip() and
-                    member['lastname'].lower().strip() == lastname.lower().strip()):
+                if (osm_firstname.lower().strip() ==
+                        firstname.lower().strip() and
+                    member['lastname'].lower().strip() ==
+                        lastname.lower().strip()):
                     l.append(member)
         return l
 
@@ -204,8 +206,25 @@ class Group(object):
             if (section_wanted and section_wanted != section):
                 continue
             for member in sections[section]:
-                if (member[OSM_REF_FIELD].lower().strip() == ref.lower().strip()):
+                if (member[OSM_REF_FIELD].lower().strip() ==
+                        ref.lower().strip()):
                     l.append(member)
+        return l
+
+    def find_by_scoutid(self, scoutid, section_wanted=None):
+        """Return a list of records with matching scoutids"""
+        l = []
+        sections = self.all_yp_members_dict()
+        for section in sections.keys():
+            if (section_wanted and section_wanted != section):
+                continue
+            for member in sections[section]:
+                try:
+                    if (str(member['member_id']) == scoutid.strip()):
+                        l.append(member)
+                except:
+                    print(str(member))
+                    raise
         return l
 
     # For each section we need to look at whether a member appears in a
@@ -249,11 +268,13 @@ class Group(object):
 
     def girls_in_section(self, section):
         return [m for m in self.section_yp_members_without_leaders(section)
-                if m['floating.gender'].lower() == 'f' or m['floating.gender'].lower() == 'female']
+                if (m['floating.gender'].lower() == 'f' or
+                    m['floating.gender'].lower() == 'female')]
 
     def boys_in_section(self, section):
         return [m for m in self.section_yp_members_without_leaders(section)
-                if m['floating.gender'].lower() == 'm' or m['floating.gender'].lower() == 'male']
+                if (m['floating.gender'].lower() == 'm' or
+                    m['floating.gender'].lower() == 'male')]
 
     def census(self):
         """Return the information required for the annual census."""

@@ -43,6 +43,7 @@ FMT = '%Y-%m-%d %H:%M:%S %Z%z'
 
 
 class OSMException(Exception):
+
     def __init__(self, url, values, error):
         self._url = url
         self._values = values
@@ -57,6 +58,7 @@ class OSMException(Exception):
 
 
 class OSMObject(collections.MutableMapping):
+
     def __init__(self, osm, accessor, record):
         self._osm = osm
         self._accessor = accessor
@@ -102,7 +104,7 @@ class Accessor(object):
             '.osm_request_cache',
             allowable_methods=('GET', 'POST'),
             include_get_headers=True,
-            expire_after=60*60)
+            expire_after=60 * 60)
 
     def __call__(self, query, fields=None, authorising=False,
                  clear_cache=False, debug=False):
@@ -120,6 +122,8 @@ class Accessor(object):
 
         if fields:
             values.update(fields)
+
+        log.debug("posting: {} {}".format(url, values))
 
         try:
             result = self._session.post(url, data=values)
@@ -147,6 +151,7 @@ class Accessor(object):
 
 
 class Authorisor(object):
+
     def __init__(self, apiid, token):
         self.apiid = apiid
         self.token = token
@@ -175,6 +180,7 @@ class Authorisor(object):
 
 
 class Term(OSMObject):
+
     def __init__(self, osm, accessor, record):
         OSMObject.__init__(self, osm, accessor, record)
 
@@ -196,6 +202,7 @@ class Term(OSMObject):
 
 
 class Badge(OSMObject):
+
     def __init__(self, osm, accessor, section, badge_type, details, structure):
         self._section = section
         self._badge_type = badge_type
@@ -228,6 +235,7 @@ class Badge(OSMObject):
 
 
 class Badges(OSMObject):
+
     def __init__(self, osm, accessor, record, section, badge_type):
         self._section = section
         self._badge_type = badge_type
@@ -274,6 +282,7 @@ class Member(OSMObject):
                      in columns
                      if column['varname'] == tail][0]
         except:
+            # print("\n".join([column['varname'] for column in columns]))
             value = [
                 column['value'] for column
                 in columns
@@ -288,9 +297,14 @@ class Member(OSMObject):
             try:
                 return self.lookup(key)
             except:
-                raise KeyError("{!r} object has no attribute {!r}: "
+                raise KeyError("{!r} object has no attribute {!r}\n"
+                               "  Record was {}\n"
+                               "  Full custome dict was: {!r}"
                                "".format(
-                                   type(self).__name__, key))
+                                   type(self).__name__, key,
+                                   pp.pformat(
+                                       self.__dict__['_record']),
+                                   pp.pformat(self._custom)))
 
     def __getitem__(self, key):
         try:
@@ -301,19 +315,23 @@ class Member(OSMObject):
             except:
                 log.debug(pp.pformat(self.__dict__['_record']))
                 log.debug(pp.pformat(self._custom))
-                raise KeyError("{!r} object has no attribute {!r}: "
+                raise KeyError("{!r} object has no attribute {!r}\n"
+                               "  Record was {}\n"
+                               "  Full custome dict was: {}: "
                                "".format(
                                    type(self).__name__, key,
-                                   ))
+                                   pp.pformat(self.__dict__['_record']),
+                                   pp.pformat(self._custom)
+                               ))
 
-    def get_badges(self):
-        "Return a list of badges objects for this member."
-
-        ret = []
-        for i in list(self._section.challenge.values()):
-            ret.extend([badge for badge in badge.get_members()
-                        if badge['scoutid'] == self['scoutid']])
-        return ret
+    # def get_badges(self):
+    #     "Return a list of badges objects for this member."
+    #
+    #     ret = []
+    #     for i in list(self._section.challenge.values()):
+    #         ret.extend([badge for badge in badge.get_members()
+    #                     if badge['scoutid'] == self['scoutid']])
+    #     return ret
 
 
 class Members(OSMObject):
@@ -327,10 +345,10 @@ class Members(OSMObject):
         members = {}
         for key, member in record['data'].items():
             # Fetch detailed info for member.
-            url = "ext/customdata/?action=getData"
+            url = "ext/customdata/?action=getData&section_id={}".format(
+                int(self._section['sectionid']))
             # "&section_id={}".format(self._section['sectionid'])
-            fields = {'section_id': self._section['sectionid'],
-                      'associated_id': key,
+            fields = {'associated_id': key,
                       'associated_type': 'member',
                       'context': 'members'}
 
@@ -340,6 +358,9 @@ class Members(OSMObject):
                 osm, section, accessor, member, custom_data['data'])
 
         OSMObject.__init__(self, osm, accessor, members)
+
+    def get_by_event_attendee(self, attendee):
+        return self[attendee['scoutid']]
 
 
 class Event(OSMObject):
@@ -453,6 +474,7 @@ class Meeting(OSMObject):
 
 
 class Programme(OSMObject):
+
     def __init__(self, osm, section, accessor, record):
         self._osm = osm,
         self._section = section
@@ -487,6 +509,7 @@ class Programme(OSMObject):
 
 
 class Section(OSMObject):
+
     def __init__(self, osm, accessor, record, init=True, term=None):
         OSMObject.__init__(self, osm, accessor, record)
 
@@ -553,10 +576,6 @@ class Section(OSMObject):
         if self.term:
             try:
                 self.programme = self._get_programme()
-            except urllib.error.HTTPError as err:
-                log.warn("Failed to get programme for section {0}: {1}"
-                         .format(self['sectionname'],
-                                 err))
             except:
                 log.warn("Failed to get programme for section {0}"
                          .format(self['sectionname']),
@@ -589,8 +608,8 @@ class Section(OSMObject):
         return Badges(self._osm, self._accessor,
                       self._accessor(url), self, badge_type)
 
-    def events(self):
-        pass
+    # def events(self):
+    #    pass
 
     def _get_events(self):
         url = "ext/events/summary/?action=get" \
@@ -601,7 +620,7 @@ class Section(OSMObject):
 
         return Events(self._osm, self, self._accessor,
                       self._accessor(url))
-        
+
     def _get_members(self):
         url = "ext/members/contact/grid/?action=getMembers" \
               "&section_id={0}" \
@@ -625,6 +644,7 @@ class Section(OSMObject):
 
 
 class OSM(object):
+
     def __init__(self, authorisor, sectionid_list=False, term=None):
         self._accessor = Accessor(authorisor)
 
@@ -662,12 +682,14 @@ class OSM(object):
 
         if any([section.term is None for section in self.sections.values()]):
             log.warn("Term not set for at least one section")
-        elif len(set([section.term['name'] for section in
+        elif len(set([section.term['name'].strip() for section in
                       self.sections.values()])) != 1:
-            log.warn("Not all sections have the same active term: {}".format(
-                "\n".join(["{} - {}".format(
-                    section['sectionname'], section.term['name'])
-                    for section in self.sections.values()])))
+            log.warn("Not all sections have the same active term: \n "
+                     "{}".format(
+                         "\n".join(
+                             ["{} - {}".format(
+                                 section['sectionname'], section.term['name'])
+                              for section in self.sections.values()])))
 
     def terms(self, sectionid):
         terms = self._accessor('api.php?action=getTerms')
@@ -712,39 +734,35 @@ if __name__ == '__main__':
     test_section = args['-s'] if args['-s'] else '15797'
     members = osm.sections[test_section].members
 
-    #import pdb
-    #pdb.set_trace()
+    # import pdb
+    # pdb.set_trace()
     for v in members.values():
         print(str(v))
 
-    #log.debug('Sections - {0}\n'.format(osm.sections))
+    # log.debug('Sections - {0}\n'.format(osm.sections))
 
-
-    #for badge in list(osm.sections[test_section].challenge.values()):
+    # for badge in list(osm.sections[test_section].challenge.values()):
     #    log.debug('{0}'.format(badge._record))
-              
-    
+
     #    member = members[members.keys()[0]]
-    #member['special'] = 'changed'
-    #member.save()
-    
-    #new_member = members.new_member('New First 2','New Last 2','02/09/2004','02/12/2012','02/11/2012')
-    
-    #log.debug("New member = {0}: {1}".format(new_member.firstname,new_member.lastname))
-    #new_member.save()
+    # member['special'] = 'changed'
+    # member.save()
 
-    
-        
-    #for k,v in osm.sections['14324'].members.items():
-    #    log.debug("{0}: {1} {2} {3}".format(k,v.firstname,v.lastname,v.TermtoScouts))
+    # new_member = members.new_member('New First 2','New Last 2','02/09/2004',
+    #    '02/12/2012','02/11/2012')
+    # log.debug("New member = {0}: {1}".format(new_member.firstname,
+    #    new_member.lastname))
+    # new_member.save()
 
-    #for k,v in osm.sections['14324'].activity.items():
+    # for k,v in osm.sections['14324'].members.items():
+    #    log.debug("{0}: {1} {2} {3}".format(k,v.firstname,
+    #    v.lastname,v.TermtoScouts))
+
+    # for k,v in osm.sections['14324'].activity.items():
     #    log.debug("{0}: {1}".format(k,v.keys()))
 
-
-    #pp.pprint(osm.sections['14324'].members())
-    #for k,v in osm.sections['14324'].challenge.items():
+    # pp.pprint(osm.sections['14324'].members())
+    # for k,v in osm.sections['14324'].challenge.items():
     #    log.debug("{0}: {1}".format(k,v.keys()))
-
 
     Accessor.__cache_save__(open(DEF_CACHE, 'wb'))
