@@ -2,7 +2,8 @@
 """Online Scout Manager Interface.
 
 Usage:
-  export_group_vcard.py [-d] [--term=<term>] [--email=<address>] <apiid> <token> <outdir> <section>... 
+  export_group_vcard.py [-d] [--term=<term>] [--email=<address>]
+         <apiid> <token> <outdir> <section>...
   export_group_vcard.py (-h | --help)
   export_group_vcard.py --version
 
@@ -21,7 +22,6 @@ Options:
 import os.path
 import logging
 import itertools
-import socket
 import functools
 import smtplib
 from docopt import docopt
@@ -44,6 +44,7 @@ DEF_CACHE = "osm.cache"
 DEF_CREDS = "osm.creds"
 
 FROM = "Richard Taylor <r.taylor@bcs.org.uk>"
+
 
 def send(to, subject, vcards, fro=FROM):
 
@@ -129,7 +130,17 @@ def process_parent(name, member, section, f):
         next_('tel', name, number)
 
     for _ in ['email1', 'email2']:
-        next_('email', _, f(_))
+        if f(_).strip() == "":
+            # Ignore empty emails.
+            continue
+
+        # If the email is marked as private, add it as a note.
+        if (f(_).startswith('x ') or
+                f("{}_leaders".format(_)) != "yes"):
+            next_('note', _,
+                  "Private email address: {}".format(f(_)))
+        else:
+            next_('email', _, f(_))
 
     next_('adr', 'Primary',
           vo.vcard.Address(
@@ -196,26 +207,3 @@ if __name__ == '__main__':
 
     _main(osm, auth, args['<section>'],
           args['<outdir>'], args['--email'], args['--term'])
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

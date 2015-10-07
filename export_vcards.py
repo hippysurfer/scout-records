@@ -2,7 +2,7 @@
 """Online Scout Manager Interface.
 
 Usage:
-  export_vcards.py [-d] [--term=<term>] <apiid> <token> <outdir> <section>... 
+  export_vcards.py [-d] [--term=<term>] <apiid> <token> <outdir> <section>...
   export_vcards.py (-h | --help)
   export_vcards.py --version
 
@@ -45,7 +45,7 @@ def parse_tel(number_field, default_name):
     number = number_field[:index].strip() if index != 0 else number_field
     name = number_field[index:].strip() if index != 0 else default_name
 
-    #print("input = {}, index = {}, number = {}, name = {}".format(
+    # print("input = {}, index = {}, number = {}, name = {}".format(
     #    number_field, index, number, name))
 
     return number, name
@@ -78,8 +78,8 @@ def get(field, member, section):
 
 
 def add_base(next_, member, label, section, field_func=None):
-    f = field_func if field_func else functools.partial(get, 
-                                                        member=member, 
+    f = field_func if field_func else functools.partial(get,
+                                                        member=member,
                                                         section=section)
 
     for _ in ['phone1', 'phone2']:
@@ -87,13 +87,21 @@ def add_base(next_, member, label, section, field_func=None):
         next_('tel', name, number)
 
     for _ in ['email1', 'email2']:
-        try:
-            pref = True if f("{}_leaders".format(_)) == "yes" else False
-        except KeyError:
-            pref = False
+        if f(_).strip() == "":
+            # Ignore empty emails.
+            continue
 
-        next_('email', label, f(_),
-              pref=pref)
+        # If the email is marked as private, add it as a note.
+        if section == 'emergency':
+            next_('note', label,
+                  "Emergency email address: {}".format(f(_)))
+
+        elif (f(_).startswith('x ') or
+              f("{}_leaders".format(_)) != "yes"):
+            next_('note', label,
+                  "Private email address: {}".format(f(_)))
+        else:
+            next_('email', label, f(_))
 
     next_('adr', label,
           vo.vcard.Address(
@@ -131,8 +139,8 @@ def member2vcard(member, section):
     next_ = next_f(j, 0).next_f
 
     add_base(next_, member,
-                'Member' if section != 'Adult' else 'NOK1',
-                'contact_primary_member')
+             'Member' if section != 'Adult' else 'NOK1',
+             'contact_primary_member')
     add_contact(next_, member,
                 'Parent1' if section != 'Adult' else 'NOK1',
                 'contact_primary_1')
@@ -165,26 +173,29 @@ def member2vcard(member, section):
     cat = j.add('CATEGORIES')
 
     if section == 'Adult':
-        note.value = "NOKs: {} / {}\nMedical: {}\nNotes: {}\nSection: {}\n".format(
-            parent1, parent2, medical, notes, section
-        )
+        note.value = ("NOKs: {} / {}\nMedical: {}\nNotes: {}\n"
+                      "Section: {}\n".format(
+                          parent1, parent2, medical, notes, section))
         cat.value = ('7th', '7th Adult', '7th {}'.format(section))
     elif member.get('patrol', '') == 'Leaders':
         if int(member.age().days / 365) > 18:
-            note.value = "NOKs: {} / {}\nMedical: {}\nNotes: {}\nRole: {}\nSection: {}\n".format(
-                parent1, parent2, medical, notes, member.get('patrol', ''), section
-            )
-            cat.value = ('7th', '7th Section Leader', '7th {} Leader'.format(section))
+            note.value = ("NOKs: {} / {}\nMedical: {}\n"
+                          "Notes: {}\nRole: {}\nSection: {}\n".format(
+                              parent1, parent2, medical, notes,
+                              member.get('patrol', ''), section))
+            cat.value = ('7th', '7th Section Leader',
+                         '7th {} Leader'.format(section))
         else:
-            note.value = "Parents: {} / {}\nMedical: {}\nNotes: {}\nPatrol: {}\nSection: {}\n".format(
-                parent1, parent2, medical, notes, member.get('patrol', ''), section
-            )
+            note.value = ("Parents: {} / {}\nMedical: {}\nNotes: {}\n"
+                          "Patrol: {}\nSection: {}\n".format(
+                              parent1, parent2, medical, notes,
+                              member.get('patrol', ''), section))
             cat.value = ('7th', '7th YL', '7th {} YL'.format(section))
-            
     else:
-        note.value = "Parents: {} / {}\nMedical: {}\nNotes: {}\nPatrol: {}\nSection: {}\n".format(
-            parent1, parent2, medical, notes, member.get('patrol', ''), section
-        )
+        note.value = ("Parents: {} / {}\nMedical: {}\nNotes: {}\n"
+                      "Patrol: {}\nSection: {}\n".format(
+                          parent1, parent2, medical, notes,
+                          member.get('patrol', ''), section))
         cat.value = ('7th', '7th YP', '7th {} YP'.format(section))
 
     return j.serialize()
@@ -226,26 +237,3 @@ if __name__ == '__main__':
 
     _main(osm, auth, args['<section>'], args['<outdir>'],
           args['--term'])
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
