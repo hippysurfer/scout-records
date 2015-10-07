@@ -1,3 +1,4 @@
+\#*\#
 *.py[cod]
 
 # C extensions
@@ -39,4 +40,18 @@ nosetests.xml
 creds.py
 osm.creds
 owncloud_accounts.py
+key.pem
+docs.txt
 
+
+# Misc bits
+.ipynb_checkpoints
+.osm_request_cache.sqlite
+.ropeproject
+archive
+tmp
+vcards
+py
+carddav_util
+google_accounts.py
+ipython_notebooks
