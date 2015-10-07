@@ -10,6 +10,7 @@ Usage:
 Options:
    -a, --attending  Only list those that are attending.
    -c, --csv        Output in CSV format.
+   --no_headers     Exclude headers from tables.
 
 """
 
@@ -52,27 +53,41 @@ def events_info(osm, auth, section, event, term=None):
 
 
 def events_attendees(osm, auth, section, event,
-                     term=None, csv=False, attending_only=False):
+                     term=None, csv=False, attending_only=False,
+                     no_headers=False):
     group = Group(osm, auth, MAPPING.keys(), term)
-
-    ev = group._sections.sections[
-        Group.SECTIONIDS[section]].events.get_by_name(event)
+    section_ = group._sections.sections[Group.SECTIONIDS[section]]
+    ev = section_.events.get_by_name(event)
     attendees = ev.attendees
     mapping = ev.fieldmap
     if attending_only:
-        output = ([str(attendee[_[1]]) for _ in mapping]
-                  for attendee in attendees
-                  if attendee['attending'] == "Yes")
-    else:
-        output = ([str(attendee[_[1]]) for _ in mapping]
-                  for attendee in attendees)
-    headers = (_[0] for _ in mapping)
+        attendees = [attendee for attendee in attendees
+                     if attendee['attending'] == "Yes"]
+
+    extra_fields = {
+        'patrol': 'Six',
+        'age': 'Age',
+    }
+
+    def fields(attendee):
+        out = [str(attendee[_[1]]) for _ in mapping] + \
+              [section_.members.get_by_event_attendee(attendee)[_] for _ in
+               extra_fields.keys()]
+        return out
+
+    output = [fields(attendee)
+              for attendee in attendees]
+    headers = [_[0] for _ in mapping] + list(extra_fields.values())
     if csv:
         w = csv_writer(sys.stdout)
-        w.writerow(list(headers))
+        if not no_headers:
+            w.writerow(list(headers))
         w.writerows(output)
     else:
-        print(tabulate.tabulate(output, headers=headers))
+        if not no_headers:
+            print(tabulate.tabulate(output, headers=headers))
+        else:
+            print(tabulate.tabulate(output, tablefmt="plain"))
 
 
 if __name__ == '__main__':
@@ -95,7 +110,8 @@ if __name__ == '__main__':
             events_attendees(osm, auth, args['<section>'],
                              args['<event>'],
                              csv=args['--csv'],
-                             attending_only=args['--attending'])
+                             attending_only=args['--attending'],
+                             no_headers=args['--no_headers'])
         elif args['info']:
             events_info(osm, auth, args['<section>'], args['<event>'])
         else:
