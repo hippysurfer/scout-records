@@ -258,15 +258,45 @@ class Badges(OSMObject):
 
 class Member(OSMObject):
 
+    # List of custom groups that we expect to find.
+    EXPECTED_CUSTOM = ('customisable_data', 'contact_primary_1',
+                       'contact_primary_2', 'contact_primary_member')
+
     def __init__(self, osm, section, accessor, record, custom):
         OSMObject.__init__(self, osm, accessor, record)
 
         self._section = section
         self._custom = custom
 
+    def check_custom_group(self):
+        '''Report any errors missing custom groups.'''
+
+        custom_groups = [group['identifier'] for group in
+                         self._custom]
+
+        missing = [group for group in self.__class__.EXPECTED_CUSTOM
+                   if group not in custom_groups]
+
+        if len(missing) > 0:
+            log.warn("Member record ({}) missing custom groups: {}".fomat(
+                " ".join(self['first_name'], self['last_name']),
+                ",".join(missing)))
+
     def __str__(self):
-        return "Member: \n Section = {!r}\n record = {}".format(
-            self._section, OSMObject.__str__(self))
+        groups = [(group['identifier'], group['columns'])
+                  for group in self._custom]
+
+        out = ""
+        for group in groups:
+            group_id, columns = group
+
+            for column in columns:
+                out += "{}.{} ({}) = {}\n".format(
+                    group_id, column['varname'],
+                    column['label'], column['value'])
+
+        return "Member: \n Section = {!r}\n record = {} \n custom = {}".format(
+            self._section, OSMObject.__str__(self), out)
 
     def lookup(self, key):
         """Attempt to find a key in the member record."""
@@ -299,12 +329,9 @@ class Member(OSMObject):
             except:
                 raise KeyError("{!r} object has no attribute {!r}\n"
                                "  Record was {}\n"
-                               "  Full custome dict was: {!r}"
                                "".format(
                                    type(self).__name__, key,
-                                   pp.pformat(
-                                       self.__dict__['_record']),
-                                   pp.pformat(self._custom)))
+                                   str(self)))
 
     def __getitem__(self, key):
         try:
@@ -313,15 +340,11 @@ class Member(OSMObject):
             try:
                 return self.lookup(key)
             except:
-                log.debug(pp.pformat(self.__dict__['_record']))
-                log.debug(pp.pformat(self._custom))
                 raise KeyError("{!r} object has no attribute {!r}\n"
-                               "  Record was {}\n"
-                               "  Full custome dict was: {}: "
+                               "  Record was {}:\n"
                                "".format(
                                    type(self).__name__, key,
-                                   pp.pformat(self.__dict__['_record']),
-                                   pp.pformat(self._custom)
+                                   str(self)
                                ))
 
     # def get_badges(self):
