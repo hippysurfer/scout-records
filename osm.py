@@ -29,6 +29,8 @@ import dateutil.parser
 import pytz
 import pprint
 import collections
+import os.path
+from os.path import expanduser
 from operator import attrgetter
 
 log = logging.getLogger(__name__)
@@ -101,7 +103,7 @@ class Accessor(object):
     def __init__(self, authorisor):
         self._auth = authorisor
         self._session = requests_cache.CachedSession(
-            '.osm_request_cache',
+            os.path.join(expanduser("~"), '.osm_request_cache'),
             allowable_methods=('GET', 'POST'),
             include_get_headers=True,
             expire_after=60 * 60)

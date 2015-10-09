@@ -251,8 +251,8 @@ def _main(osm, auth, outdir, email, term):
         members_paying_multiple_subs.dropna(
             axis=1, how='all').to_excel(writer, "Multiple  payers")
 
-        if email:
-            send([email, ], "OSM Subs Report", out_path)
+    if email:
+        send([email, ], "OSM Subs Report", out_path)
 
 
 if __name__ == '__main__':
