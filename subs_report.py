@@ -119,7 +119,10 @@ def fetch_scheme(group, acc, section, scheme, term):
     data['subs_type'] = data.apply(set_subs_type, axis=1)
 
     data['section'] = section['name']
-    data['scheme'] = scheme['name']
+    data['scheme'] = (
+        "General Subscriptions"
+        if scheme['name'].startswith("General Subscriptions")
+        else "Discounted Subscriptions")
 
     for schedule in schedules:
         data.rename(columns={schedule['paymentid']: schedule['name']},
@@ -134,7 +137,18 @@ def fetch_section(group, acc, section, term):
     schemes = acc(
         "ext/finances/onlinepayments/?action=getSchemes&sectionid={}".format(
             section['id']))
-    schemes = schemes['items']
+
+    # filter only General and Discounted Subscriptions
+    schemes = [_ for _ in schemes['items'] if (
+        _['name'].startswith("General Subscriptions") or
+        _['name'].startswith("Discounted Subscriptions"))]
+
+    # Check that we only have two subscriptions remaining. If there is
+    # more, the rest of the report is going to barf.
+    if len(schemes) > 2:
+        log.error("Found more than 2 matching schemes in {}."
+                  "Matching schemes were: {}".format(section['name'],
+                                                     ",".join(schemes)))
 
     c = pd.concat([fetch_scheme(group, acc, section, scheme, term)
                    for scheme in schemes
@@ -205,10 +219,11 @@ def _main(osm, auth, outdir, email, term):
 
     # In[11]:
 
-    gen = al[al['scheme'] == 'General Subscriptions'].dropna(axis=1, how='all')
-    all_gen_members = all_members_df[all_members_df['subs_type'] == 'G']
-    all_gen_members['scoutid'] = all_gen_members['scoutid'].astype(str)
-    all_gen_members[~all_gen_members['scoutid'].isin(gen['scoutid'].values)]
+    # Not used ?
+    # gen = al[al['scheme'] == 'General Subscriptions'].dropna(axis=1, how='all')
+    # all_gen_members = all_members_df[all_members_df['subs_type'] == 'G']
+    # all_gen_members['scoutid'] = all_gen_members['scoutid'].astype(str)
+    # all_gen_members[~all_gen_members['scoutid'].isin(gen['scoutid'].values)]
 
     # In[12]:
 
