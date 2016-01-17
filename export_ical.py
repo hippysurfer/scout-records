@@ -21,7 +21,9 @@ import logging
 from docopt import docopt
 import datetime
 import osm
-import vobject as vo
+from icalendar import Calendar, Event
+
+NOW = datetime.datetime.now()
 
 from pprint import pprint
 
@@ -39,20 +41,46 @@ def orn(i):
     return i
 
 
-def event2ical(event, i):
-    e = i.add('vevent')
+def meeting2ical(section, event, i):
+    e = Event()
 
-    pprint(str(event))
-    e.add('summary').value = orn(event['title'])
-    e.add('description').value = orn(event['notesforparents'])
+    e['summary'] = "{}: {}".format(section, orn(event['title']))
+    e['description'] = orn(event['notesforparents'])
 
     if event.start_time.time() != datetime.time(0, 0, 0):
-        e.add('dtstart').value = event.start_time
+        e.add('dtstart', event.start_time)
+    else:
+        e.add('dtstart', event.start_time.date())
 
     if event.end_time.time() != datetime.time(0, 0, 0):
-        e.add('dtend').value = event.end_time
+        e.add('dtend', event.end_time)
+    else:
+        e.add('dtend', event.end_time.date())
 
-    print("{!r}".format(event.end_time))
+    e.add('dtstamp', NOW)
+
+    i.add_component(e)
+
+
+def event2ical(section, event, i):
+    e = Event()
+
+    e['summary'] = "{}: {}".format(section, orn(event['name']))
+    e['location'] = orn(event['location'])
+
+    if event.start_time.time() != datetime.time(0, 0, 0):
+        e.add('dtstart', event.start_time)
+    else:
+        e.add('dtstart', event.start_time.date())
+
+    if event.end_time.time() != datetime.time(0, 0, 0):
+        e.add('dtend', event.end_time)
+    else:
+        e.add('dtend', event.end_time.date())
+
+    e.add('dtstamp', NOW)
+
+    i.add_component(e)
 
 
 def _main(osm, auth, sections, outdir):
@@ -60,21 +88,49 @@ def _main(osm, auth, sections, outdir):
     assert os.path.exists(outdir) and os.path.isdir(outdir)
 
     for section in sections:
-        assert section in Group.SECTIONIDS.keys(), \
+        assert section in list(Group.SECTIONIDS.keys()) + ['Group'], \
             "section must be in {!r}.".format(Group.SECTIONIDS.keys())
 
     osm_sections = osm.OSM(auth, Group.SECTIONIDS.values())
 
     for section in sections:
-        i = vo.iCalendar()
-        i.add('calscale').value = "GREGORIAN"
-        i.add('X-WR-TIMEZONE').value = "Europe/London"
-        [event2ical(event, i) for
-         event in osm_sections.sections[
-             Group.SECTIONIDS[section]].programme.events_by_date()]
 
-        open(os.path.join(outdir, section + ".ical"),
-             'w').writelines(i.serialize())
+        if section == "Group":
+            i = Calendar()
+            i['x-wr-calname'] = '7th Lichfield: Group Calendar'
+            i['X-WR-CALDESC'] = 'Current Programme'
+            i['calscale'] = 'GREGORIAN'
+            i['X-WR-TIMEZONE'] = 'Europe/London'
+
+            for s in Group.SECTIONIDS.keys():
+                section_obj = osm_sections.sections[Group.SECTIONIDS[s]]
+
+                [meeting2ical(s, event, i) for
+                    event in section_obj.programme.events_by_date()]
+
+                [event2ical(s, event, i) for
+                    event in section_obj.events]
+
+            open(os.path.join(outdir, section + ".ical"),
+                 'w').write(i.to_ical().decode())
+
+        else:
+            section_obj = osm_sections.sections[Group.SECTIONIDS[section]]
+
+            i = Calendar()
+            i['x-wr-calname'] = '7th Lichfield: {}'.format(section)
+            i['X-WR-CALDESC'] = '{} Programme'.format(section_obj.term['name'])
+            i['calscale'] = 'GREGORIAN'
+            i['X-WR-TIMEZONE'] = 'Europe/London'
+
+            [meeting2ical(section, event, i) for
+             event in section_obj.programme.events_by_date()]
+
+            [event2ical(section, event, i) for
+             event in section_obj.events]
+
+            open(os.path.join(outdir, section + ".ical"),
+                 'w').write(i.to_ical().decode())
 
 if __name__ == '__main__':
 

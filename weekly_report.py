@@ -554,7 +554,7 @@ def group_report(r, group, quarter, term):
 
     #process_compass(r, group)
 
-    process_finance_spreadsheet(r, group, quarter)
+    #process_finance_spreadsheet(r, group, quarter)
 
     for section in elements.keys():
         for element in elements[section]:
