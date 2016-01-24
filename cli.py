@@ -2,6 +2,7 @@
 """OSM Command Line
 
 Usage:
+   cli [options] <apiid> <token> <section> census list
    cli [options] <apiid> <token> <section> contacts list
    cli [options] <apiid> <token> <section> events list
    cli [options] <apiid> <token> <section> events <event> attendees
@@ -28,6 +29,81 @@ from update import MAPPING
 
 DEF_CACHE = "osm.cache"
 DEF_CREDS = "osm.creds"
+
+
+def census_list(osm, auth, section, term=None, csv=False, attending_only=False,
+                     no_headers=False):
+
+    group = Group(osm, auth, MAPPING.keys(), term)
+
+    section_map = {'Garrick': 'Beavers',
+                   'Paget': 'Beavers',
+                   'Swinfen': 'Beavers',
+                   'Maclean': 'Cubs',
+                   'Somers': 'Cubs',
+                   'Rowallan': 'Cubs',
+                   'Erasmus': 'Scouts',
+                   'Boswell': 'Scouts',
+                   'Johnson': 'Scouts'}
+
+    rows = []
+
+    def add_row(section, member):
+        rows.append([section_map[section], section, member['first_name'], member['last_name'],
+                     member['date_of_birth'],
+                     member['contact_primary_member.address1'],
+                     member['contact_primary_1.address1'],
+                     member['contact_primary_2.address1'],
+                     member['floating.gender'].lower()])
+
+    all_members_dict = group.all_yp_members_without_senior_duplicates_dict()
+
+    for section in ('Swinfen', 'Paget', 'Garrick'):
+        members = all_members_dict[section]
+        for member in members:
+            age = member.age().days / 365
+            if (age > 5 and age < 9):
+                add_row(section, member)
+            else:
+                log.info("Excluding: {} {} because not of Beaver age ({}).".format(
+                    member['first_name'], member['last_name'], age
+                ))
+
+    for section in ('Maclean', 'Rowallan', 'Somers'):
+        members = all_members_dict[section]
+        for member in members:
+            age = member.age().days / 365
+            if (age > 7 and age < 11):
+                add_row(section, member)
+            else:
+                log.info("Excluding: {} {} because not of Cub age ({}).".format(
+                    member['first_name'], member['last_name'], age
+                ))
+
+    for section in ('Johnson', 'Boswell', 'Erasmus'):
+        members = all_members_dict[section]
+        for member in members:
+            age = member.age().days / 365
+            if (age > 10 and age < 16):
+                add_row(section, member)
+            else:
+                log.info("Excluding: {} {} because not of Scout age ({}).".format(
+                    member['first_name'], member['last_name'], age
+                ))
+
+
+    headers = ["Section", "Section Name", "First", "Last", "DOB", "Address1", "Address2", "Address3", "Gender"]
+
+    if csv:
+        w = csv_writer(sys.stdout)
+        if not no_headers:
+            w.writerow(list(headers))
+        w.writerows(rows)
+    else:
+        if not no_headers:
+            print(tabulate.tabulate(rows, headers=headers))
+        else:
+            print(tabulate.tabulate(rows, tablefmt="plain"))
 
 
 def contacts_list(osm, auth, section, term=None):
@@ -97,8 +173,8 @@ if __name__ == '__main__':
 
     args = docopt(__doc__, version='OSM 2.0')
 
-    assert args['<section>'] in Group.SECTIONIDS.keys(), \
-        "section must be in {!r}.".format(Group.SECTIONIDS.keys())
+    assert args['<section>'] in list(Group.SECTIONIDS.keys())+['Group'], \
+        "section must be in {!r}.".format(list(Group.SECTIONIDS.keys())+['Group'])
 
     auth = osm.Authorisor(args['<apiid>'], args['<token>'])
     auth.load_from_file(open(DEF_CREDS, 'r'))
@@ -119,6 +195,13 @@ if __name__ == '__main__':
     elif args['contacts']:
         if args['list']:
             contacts_list(osm, auth, args['<section>'])
+        else:
+            log.error('unknown')
+    elif args['census']:
+        if args['list']:
+            census_list(osm, auth, args['<section>'],
+                        csv=args['--csv'],
+                        no_headers=args['--no_headers'])
         else:
             log.error('unknown')
     else:

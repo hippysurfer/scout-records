@@ -267,12 +267,12 @@ class Group(object):
         return kept_members
 
     def girls_in_section(self, section):
-        return [m for m in self.section_yp_members_without_leaders(section)
+        return [m for m in self.all_yp_members_without_senior_duplicates_dict()[section]
                 if (m['floating.gender'].lower() == 'f' or
                     m['floating.gender'].lower() == 'female')]
 
     def boys_in_section(self, section):
-        return [m for m in self.section_yp_members_without_leaders(section)
+        return [m for m in self.all_yp_members_without_senior_duplicates_dict()[section]
                 if (m['floating.gender'].lower() == 'm' or
                     m['floating.gender'].lower() == 'male')]
 

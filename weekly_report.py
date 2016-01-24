@@ -538,19 +538,28 @@ def group_report(r, group, quarter, term):
     r.sub_title("Section Totals (including Scubbers)")
     r.t_start(["Section", "Total YP"])
 
+    count = 0
     for section, members in group.all_yp_members_without_leaders_dict().items():
+        count += len(members)
         r.t_row([section, len(members)])
 
     r.t_end()
+
+    r.p("Total (including scubbers) = {}".format(count))
 
     r.sub_title("Section Totals (excluding Scubbers)")
 
     r.t_start(["Section", "Total YP"])
 
+    count = 0
     for section, members in group.all_yp_members_without_senior_duplicates_dict().items():
+        count += len(members)
         r.t_row([section, len(members)])
 
     r.t_end()
+
+    r.p("Total (excluding scubbers) = {}".format(count))
+
 
     #process_compass(r, group)
 
