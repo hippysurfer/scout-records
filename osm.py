@@ -17,6 +17,7 @@ Options:
   -s=<sectionid> Section ID to query [default: all].
 
 """
+import traceback
 
 from docopt import docopt
 
@@ -508,19 +509,43 @@ class Meeting(OSMObject):
         self.meeting_date = datetime.datetime.strptime(
             self._record['meetingdate'], '%Y-%m-%d')
 
-        h, m, s = (int(i) for i in self._record['starttime'].split(':'))
-        self.start_time = datetime.datetime.combine(
-            self.meeting_date,
-            datetime.time(h, m, s))
-        self.start_time = dateutil.parser.parse(
-            pyTZ.localize(self.start_time).strftime(FMT))
+        try:
+            h, m, s = (int(i) for i in self._record['starttime'].split(':'))
+            self.start_time = datetime.datetime.combine(
+                self.meeting_date,
+                datetime.time(h, m, s))
+            self.start_time = dateutil.parser.parse(
+                pyTZ.localize(self.start_time).strftime(FMT))
+        except:
+            # log.warn("Failed to interpret starttime ({}). Using 12:00:00. "
+            #          "section: {}\n"
+            #          "record = {}\n error = {}".format(
+            #                 self._record['starttime'],
+            #                 section['sectionname'],
+            #                 repr(record),
+            #                 traceback.print_exc()))
+            self.start_time = datetime.datetime.combine(
+                self.meeting_date,
+                datetime.time(12, 0, 0))
+            self.start_time = dateutil.parser.parse(
+                pyTZ.localize(self.start_time).strftime(FMT))
 
-        h, m, s = (int(i) for i in self._record['endtime'].split(':'))
-        self.end_time = datetime.datetime.combine(
-            self.meeting_date,
-            datetime.time(h, m, s))
-        self.end_time = dateutil.parser.parse(
-            pyTZ.localize(self.end_time).strftime(FMT))
+        try:
+            h, m, s = (int(i) for i in self._record['endtime'].split(':'))
+            self.end_time = datetime.datetime.combine(
+                self.meeting_date,
+                datetime.time(h, m, s))
+            self.end_time = dateutil.parser.parse(
+                pyTZ.localize(self.end_time).strftime(FMT))
+        except:
+            # log.warn("Failed to interpret endtime ({}). Using starttime. "
+            #          "section: {}\n"
+            #          "record = {}\n error = {}".format(
+            #                 self._record['endtime'],
+            #                 section['sectionname'],
+            #                 repr(record),
+            #                 traceback.print_exc()))
+            self.end_time = self.start_time
 
     def __str__(self):
         return "{} - {} - {} - {} - {}".format(
@@ -553,7 +578,7 @@ class Programme(OSMObject):
                          "record = {1}\n error = {2}".format(
                              section['sectionname'],
                              repr(record),
-                             sys.exc_info()[0]))
+                             traceback.print_exc()))
 
         OSMObject.__init__(self, osm, accessor, events)
 
