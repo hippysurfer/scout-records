@@ -2,20 +2,29 @@
 """OSM Command Line
 
 Usage:
-   cli [options] <apiid> <token> <section> census list
+   cli [options] <apiid> <token> census list
+   cli [options] <apiid> <token> census yl list
+   cli [options] <apiid> <token> census leavers
+   cli [options] <apiid> <token> <section> movers list
    cli [options] <apiid> <token> <section> contacts list
    cli [options] <apiid> <token> <section> events list
    cli [options] <apiid> <token> <section> events <event> attendees
    cli [options] <apiid> <token> <section> events <event> info
+   cli [options] <apiid> <token> <section> users list
 
 Options:
-   -a, --attending  Only list those that are attending.
-   -c, --csv        Output in CSV format.
-   --no_headers     Exclude headers from tables.
+   -a, --attending       Only list those that are attending.
+   -c, --csv             Output in CSV format.
+   --no_headers          Exclude headers from tables.
+   -t term, --term=term  Term to use
+   -m age, --minage=age  Filter by age (decimal float).
 
 """
 
 import logging
+
+import datetime
+
 log = logging.getLogger(__name__)
 
 from docopt import docopt
@@ -31,9 +40,8 @@ DEF_CACHE = "osm.cache"
 DEF_CREDS = "osm.creds"
 
 
-def census_list(osm, auth, section, term=None, csv=False, attending_only=False,
-                     no_headers=False):
-
+def census_list(osm, auth, term=None, csv=False, attending_only=False,
+                no_headers=False):
     group = Group(osm, auth, MAPPING.keys(), term)
 
     section_map = {'Garrick': 'Beavers',
@@ -91,6 +99,48 @@ def census_list(osm, auth, section, term=None, csv=False, attending_only=False,
                     member['first_name'], member['last_name'], age
                 ))
 
+    headers = ["Section", "Section Name", "First", "Last", "DOB", "Address1", "Address2", "Address3", "Gender"]
+
+    if csv:
+        w = csv_writer(sys.stdout)
+        if not no_headers:
+            w.writerow(list(headers))
+        w.writerows(rows)
+    else:
+        if not no_headers:
+            print(tabulate.tabulate(rows, headers=headers))
+        else:
+            print(tabulate.tabulate(rows, tablefmt="plain"))
+
+
+def census_yl_list(osm, auth, term=None, csv=False,
+                   no_headers=False):
+    group = Group(osm, auth, MAPPING.keys(), term)
+
+    section_map = {'Garrick': 'Beavers',
+                   'Paget': 'Beavers',
+                   'Swinfen': 'Beavers',
+                   'Maclean': 'Cubs',
+                   'Somers': 'Cubs',
+                   'Rowallan': 'Cubs',
+                   'Erasmus': 'Scouts',
+                   'Boswell': 'Scouts',
+                   'Johnson': 'Scouts'}
+
+    rows = []
+
+    def add_row(section, member):
+        rows.append([section_map[section], section, member['first_name'], member['last_name'],
+                     member['date_of_birth'],
+                     member['contact_primary_member.address1'],
+                     member['contact_primary_1.address1'],
+                     member['contact_primary_2.address1'],
+                     member['floating.gender'].lower()])
+
+    for section in Group.YP_SECTIONS:
+        yls = group.section_yl_members(section)
+        for member in yls:
+            add_row(section, member)
 
     headers = ["Section", "Section Name", "First", "Last", "DOB", "Address1", "Address2", "Address3", "Gender"]
 
@@ -106,12 +156,112 @@ def census_list(osm, auth, section, term=None, csv=False, attending_only=False,
             print(tabulate.tabulate(rows, tablefmt="plain"))
 
 
+def census_leavers(osm, auth, term=None, csv=False,
+                   no_headers=False):
+    # Nasty hack - but I need a list of terms.
+    somers_terms = Group(osm, auth, MAPPING.keys(), None)._sections.sections['20706'].get_terms()
+
+    def find_term(name):
+        return [_ for _ in somers_terms if _['name'] == name][0]
+
+    terms = [find_term(_) for _ in
+             ['Summer 2014',
+              'Autumn 2014',
+              'Spring 2015',
+              'Summer 2015',
+              'Autumn 2015',
+              'Spring 2016']]
+
+    pairs =[(terms[x],terms[x+1]) for x in range(len(terms)-1)]
+
+    section_map = {'Garrick': 'Beavers',
+                   'Paget': 'Beavers',
+                   'Swinfen': 'Beavers',
+                   'Maclean': 'Cubs',
+                   'Somers': 'Cubs',
+                   'Rowallan': 'Cubs',
+                   'Erasmus': 'Scouts',
+                   'Boswell': 'Scouts',
+                   'Johnson': 'Scouts'}
+
+    rows = []
+    for old, new in pairs:
+        old_term = Group(osm, auth, MAPPING.keys(), old['name'])
+        new_term = Group(osm, auth, MAPPING.keys(), new['name'])
+
+        old_members_raw = old_term.all_yp_members_without_senior_duplicates()
+        new_members_raw = new_term.all_yp_members_without_senior_duplicates()
+
+        old_members = [(_['first_name'], _['last_name'])
+                       for _ in old_members_raw]
+
+        new_members = [(_['first_name'], _['last_name'])
+                       for _ in new_members_raw]
+
+        missing = [_ for _ in old_members if not new_members.count(_)]
+
+        for first,last in missing:
+            sections = old_term.find_sections_by_name(first, last)
+            member = old_members_raw[old_members.index((first, last))]
+            age = member.age(ref_date=old.enddate).days // 365
+            rows.append([old['name'],section_map[sections[0]],sections[0],first,last,age,member['date_of_birth'],member['floating.gender'].lower()])
+
+    headers = ["Last Term", "Section", "Section Name", "First", "Last", "Age", "DOB", "Gender"]
+
+    if csv:
+        w = csv_writer(sys.stdout)
+        if not no_headers:
+            w.writerow(list(headers))
+        w.writerows(rows)
+    else:
+        if not no_headers:
+            print(tabulate.tabulate(rows, headers=headers))
+        else:
+            print(tabulate.tabulate(rows, tablefmt="plain"))
+
 def contacts_list(osm, auth, section, term=None):
     group = Group(osm, auth, MAPPING.keys(), term)
 
     for member in group.section_all_members(section):
         print("{} {}".format(member['first_name'], member['last_name']))
 
+
+def movers_list(osm, auth, section, age=None, term=None,
+                csv=False, no_headers=False):
+    group = Group(osm, auth, MAPPING.keys(), term)
+    section_ = group._sections.sections[Group.SECTIONIDS[section]]
+
+    headers = ['firstname', 'lastname', 'age',
+               "Date Parents Contacted", "Parents Preference",
+               "Date Leaders Contacted", "Agreed Section",
+               "Starting Date", "Leaving Date", "Notes", "Priority"]
+
+    movers = section_.movers
+
+
+    if age:
+        threshold = (365*float(age))
+        now = datetime.datetime.now()
+        age = lambda dob: (now - datetime.datetime.strptime(dob,'%Y-%m-%d')).days
+
+        movers = [mover for mover in section_.movers
+                  if age(mover['dob']) > threshold]
+
+    rows = [[section_['sectionname']] +[member[header] for header in headers]
+            for member in movers]
+
+    headers = ["Current Section"] + headers
+
+    if csv:
+        w = csv_writer(sys.stdout)
+        if not no_headers:
+            w.writerow(list(headers))
+        w.writerows(rows)
+    else:
+        if not no_headers:
+            print(tabulate.tabulate(rows, headers=headers))
+        else:
+            print(tabulate.tabulate(rows, tablefmt="plain"))
 
 def events_list(osm, auth, section, term=None):
     group = Group(osm, auth, MAPPING.keys(), term)
@@ -166,6 +316,13 @@ def events_attendees(osm, auth, section, event,
             print(tabulate.tabulate(output, tablefmt="plain"))
 
 
+def users_list(osm, auth, section, csv=False, no_headers=False, term=None):
+    group = Group(osm, auth, MAPPING.keys(), term)
+
+    for user in group._sections.sections[Group.SECTIONIDS[section]].users:
+        print(user['firstname'])
+
+
 if __name__ == '__main__':
     level = logging.INFO
 
@@ -173,8 +330,11 @@ if __name__ == '__main__':
 
     args = docopt(__doc__, version='OSM 2.0')
 
-    assert args['<section>'] in list(Group.SECTIONIDS.keys())+['Group'], \
-        "section must be in {!r}.".format(list(Group.SECTIONIDS.keys())+['Group'])
+    if args['<section>']:
+        assert args['<section>'] in list(Group.SECTIONIDS.keys()) + ['Group'], \
+            "section must be in {!r}.".format(list(Group.SECTIONIDS.keys()) + ['Group'])
+
+    term = args['--term'] if args['--term'] else None
 
     auth = osm.Authorisor(args['<apiid>'], args['<token>'])
     auth.load_from_file(open(DEF_CREDS, 'r'))
@@ -197,14 +357,40 @@ if __name__ == '__main__':
             contacts_list(osm, auth, args['<section>'])
         else:
             log.error('unknown')
-    elif args['census']:
+    elif args['movers']:
         if args['list']:
-            census_list(osm, auth, args['<section>'],
+            movers_list(osm, auth, args['<section>'],
+                        age=args['--minage'],
                         csv=args['--csv'],
                         no_headers=args['--no_headers'])
         else:
             log.error('unknown')
+    elif args['census']:
+        if (args['yl'] and args['list']):
+            census_yl_list(osm, auth,
+                           csv=args['--csv'],
+                           no_headers=args['--no_headers'])
+
+        elif args['leavers']:
+            census_leavers(osm, auth,
+                        csv=args['--csv'],
+                        no_headers=args['--no_headers'])
+
+
+        elif args['list']:
+            census_list(osm, auth,
+                        term=args['--term'],
+                        csv=args['--csv'],
+                        no_headers=args['--no_headers'])
+
+        else:
+            log.error('unknown')
+    elif args['users']:
+        if args['list']:
+            users_list(osm, auth, args['<section>'],
+                       csv=args['--csv'],
+                       no_headers=args['--no_headers'])
+        else:
+            log.error('unknown')
     else:
         log.error('unknown')
-        
-        

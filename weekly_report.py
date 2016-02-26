@@ -39,7 +39,8 @@ from update import MAPPING
 from group import OSM_REF_FIELD
 import finance
 import google
-#import compass
+
+# import compass
 
 PERSONAL_REFERENCE_RE = re.compile('^[A-Z0-9]{4}-[A-Z]{2}-\d{6}$')
 
@@ -65,7 +66,6 @@ log = logging.getLogger(__name__)
 
 
 class Reporter(object):
-
     STYLE = "\n".join(["hr {color:sienna;}",
                        "h1 {border-bottom-style:solid; border-color:red;}",
                        "p {margin-left:20px;}",
@@ -78,7 +78,6 @@ class Reporter(object):
 
     def send(self, to, subject,
              fro=FROM):
-
         for dest in to:
             msg = MIMEMultipart('alternative')
             msg['Subject'] = subject
@@ -89,7 +88,7 @@ class Reporter(object):
 
             msg.attach(body)
 
-            #hostname = 'www.thegrindstone.me.uk' \
+            # hostname = 'www.thegrindstone.me.uk' \
             #           if not socket.gethostname() == 'rat' \
             #           else 'localhost'
             hostname = 'localhost'
@@ -99,11 +98,11 @@ class Reporter(object):
             s.quit()
 
     def report(self):
-        return "<html><head><style>{}</style></head>"\
-            "<body>\n{}\n</body></html>".format(self.STYLE, self.t)
+        return "<html><head><style>{}</style></head>" \
+               "<body>\n{}\n</body></html>".format(self.STYLE, self.t)
 
     def title(self, title):
-        self.t += '<h1 style="border-bottom-style:solid; border-color:red;"'\
+        self.t += '<h1 style="border-bottom-style:solid; border-color:red;"' \
                   '>{}</h1>\n'.format(title)
 
     def sub_title(self, sub_title):
@@ -188,28 +187,37 @@ def check_bad_data(r, group, section):
                 member['floating.gender']))
 
         if member['customisable_data.PersonalReference'].strip() == '':
-            report.append("<b>Missing Personal Reference</b>")
+            report.append("<b>Missing Personal Reference,</b>")
 
         elif not PERSONAL_REFERENCE_RE.match(
                 member['customisable_data.PersonalReference'].strip()):
             report.append("<b>Bad Personal Reference ('{}')"
                           " must match pattern: SSSS-FF-DDMMYY</b>".format(
-                              member['customisable_data.PersonalReference'].strip()))
-
-        if member['contact_primary_1.address1'].strip() == '':
-            report.append("Primary Address missing")
-
-        if member['contact_primary_1.phone1'].strip() == '':
-            report.append("Home Tel missing")
+                member['customisable_data.PersonalReference'].strip()))
 
         if section != 'Adult':
+            if member['contact_primary_1.address1'].strip() == '':
+                report.append("Primary Address missing")
+
+            if (member['contact_primary_1.phone1'].strip() == '' and
+                        member['contact_primary_1.phone2'].strip() == '' and
+                        member['contact_primary_2.phone1'].strip() == '' and
+                        member['contact_primary_2.phone2'].strip() == ''):
+                report.append("No telephone number in primary contant 1 or 2")
 
             if int(member.age().days / 365) < MIN_AGE[section] or \
-               int(member.age().days / 365) > MAX_AGE[section]:
-
+                            int(member.age().days / 365) > MAX_AGE[section]:
                 report.append("Age ({}) is out of range ({} - {})".format(
                     int(member.age().days / 365),
                     MIN_AGE[section], MAX_AGE[section]))
+        else:
+
+            if member['contact_primary_member.address1'].strip() == '':
+                report.append("Member Address missing")
+
+            if (member['contact_primary_member.phone1'].strip() == '' and
+                        member['contact_primary_member.phone2'].strip() == ''):
+                report.append("No telephone number for member.")
 
         if report:
             reports.append((member, report))
@@ -229,7 +237,7 @@ def process_finance_spreadsheet(r, group, quarter):
     gc = google.conn()
 
     fin = gc.open(finance.FINANCE_SPREADSHEET_NAME)
-    #fin = gc.open_by_key('0AobgMqwG6nlpdHdocFkwVVhNd2pGbTBRX1pCanBVdVE')
+    # fin = gc.open_by_key('0AobgMqwG6nlpdHdocFkwVVhNd2pGbTBRX1pCanBVdVE')
 
     # Fetch list of personal references from the finance spreadsheet
     # along with the current "Q4" section.
@@ -241,7 +249,7 @@ def process_finance_spreadsheet(r, group, quarter):
     )[finance.FIN_HEADER_ROW:]
 
     # TODO: Parameterise the selection of the current quarter.
-    #q4_section = wks.col_values(
+    # q4_section = wks.col_values(
     #    1 + headings.index('{} Sec'.format(quarter)))[finance.FIN_HEADER_ROW:]
 
     group.set_yl_as_yp(False)
@@ -313,7 +321,7 @@ def process_finance_spreadsheet(r, group, quarter):
         if len(member) > 0:
             r.t_row([member[0][k[1]] for k in headings])
         else:
-            r.t_row([ref,])
+            r.t_row([ref, ])
 
     r.t_end()
 
@@ -512,10 +520,11 @@ def census(r, group):
     r.p("Female = {}".format(total_female))
     r.p("Census total = {}".format(total_male + total_female))
 
+
 COMMON = [intro,
           check_bad_data]
 
-#NOT_ADULT = [section_compass_check, ]
+# NOT_ADULT = [section_compass_check, ]
 NOT_ADULT = []
 
 elements = {'Maclean': COMMON + NOT_ADULT,
@@ -560,10 +569,44 @@ def group_report(r, group, quarter, term):
 
     r.p("Total (excluding scubbers) = {}".format(count))
 
+    r.sub_title("Young Leaders Per Section")
 
-    #process_compass(r, group)
+    r.t_start(["Section", "Total YL"])
 
-    #process_finance_spreadsheet(r, group, quarter)
+    count = 0
+    for section, members in group.all_yl_members_dict().items():
+        count += len(members)
+        r.t_row([section, len(members)])
+
+    r.t_end()
+
+    r.p("Total Young Leaders in Sections (note this may contain duplicates) = {}".format(count))
+
+    # Get a list of all YL in all of the YP sections
+    yls = group.all_yl_members()
+    # Create a list of their names.
+    refs = ["{} {}".format(_['first_name'], _['last_name']) for _ in yls]
+    # Get a list of any that appear more than once.
+    dups = set(["{} {}".format(_['first_name'], _['last_name']) for _ in yls
+                if refs.count("{} {}".format(_['first_name'], _['last_name'])) > 1])
+    # Get the total number of duplications.
+    dup_count = sum(set([refs.count("{} {}".format(_['first_name'], _['last_name'])) for _ in yls
+                         if refs.count("{} {}".format(_['first_name'], _['last_name'])) > 1]))
+
+    r.sub_title("Young Leaders that are in more than 1 Section")
+
+    r.t_start(["Name", "Number of Sections"])
+
+    for yl in dups:
+        r.t_row([yl, refs.count(yl)])
+
+    r.t_end()
+
+    r.p("Total Young Leaders in Sections (duplicates removed) = {}".format(count - dup_count))
+
+    # process_compass(r, group)
+
+    # process_finance_spreadsheet(r, group, quarter)
 
     for section in elements.keys():
         for element in elements[section]:
@@ -571,7 +614,6 @@ def group_report(r, group, quarter, term):
 
 
 def _main(osm, auth, sections, no_email, email, quarter, term, http):
-
     if isinstance(sections, str):
         sections = [sections, ]
 

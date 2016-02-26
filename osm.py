@@ -138,6 +138,7 @@ class Accessor(object):
         if result.status_code != 200:
             log.error("urlopen failed with status code {}: {}, {}".format(
                 result.status_code, url, repr(values)))
+            return None
 
         # Crude test to see if the response is JSON
         # OSM returns a string as an error case.
@@ -360,6 +361,24 @@ class Member(OSMObject):
     #     return ret
 
 
+class Users(collections.Sequence):
+
+    def __init__(self, osm, section, accessor, record):
+        if record:
+            self._users = record
+        else:
+            self._users = []
+
+    def __getitem__(self, indx):
+        return self._users[indx]
+
+    def __len__(self):
+        return len(self._users)
+
+    def get_by_name(self, name):
+        return [_ for _ in self._users if _['firstname'] == name][0]
+
+
 class Members(OSMObject):
 
     def __init__(self, osm, section, accessor, record):
@@ -387,6 +406,36 @@ class Members(OSMObject):
 
     def get_by_event_attendee(self, attendee):
         return self[attendee['scoutid']]
+
+
+class Movers(collections.Sequence):
+
+    def __init__(self, osm, section, accessor, headers, data):
+        self._osm = osm,
+        self._section = section
+        self._accessor = accessor
+
+        self._movers = []
+
+        fields = {row['field']:row['name'] for row in headers['structure'][1]['rows']}
+
+        self._movers = data['items']
+
+        # Merge the field names to make look up easier.
+        for mover in self._movers:
+            for field,name in fields.items():
+                mover[name] =  mover[field]
+                # Remove the 'F_1' style name as it is just confusing.
+                del mover[field]
+
+        # Build a list of all available headings.
+        self.headers = list(self._movers[0].keys())
+
+    def __getitem__(self, indx):
+        return self._movers[indx]
+
+    def __len__(self):
+        return len(self._movers)
 
 
 class Event(OSMObject):
@@ -604,14 +653,15 @@ class Section(OSMObject):
         if self.requested_term is not None:
             # We have requested a specific term.
             self.terms = [term for term in self._osm.terms(self['sectionid'])
-                          if term['name'] == self.requested_term]
+                          if term['name'].strip() == self.requested_term.strip()]
 
             if len(self.terms) != 1:
-                log.error("Requested term ({}) is not in available "
+                log.warn("Requested term ({}) for section {} is not in available "
                           "terms ({})".format(
-                              self.requested_term,
-                              ",".join([term['name'] for term in self.terms])))
-                sys.exit(1)
+                    self.requested_term,
+                    ",".join([term['name'] for term in self.terms]),
+                    self['sectionname']))
+                #sys.exit(1)
 
         else:
             self.terms = [term for term in self._osm.terms(self['sectionid'])]
@@ -669,6 +719,21 @@ class Section(OSMObject):
                      .format(self['sectionname']),
                      exc_info=True)
 
+        try:
+            self.users = self._get_users()
+        except:
+            log.warn("Failed to get users for section {0}"
+                     .format(self['sectionname']),
+                     exc_info=True)
+
+        try:
+            self.movers = self._get_movers()
+        except:
+            log.warn("Failed to get movers for section {0}"
+                     .format(self['sectionname']),
+                     exc_info=True)
+
+
     def __repr__(self):
         return 'Section({0}, "{1}", "{2}")'.format(
             self['sectionid'],
@@ -702,6 +767,50 @@ class Section(OSMObject):
         return Events(self._osm, self, self._accessor,
                       self._accessor(url))
 
+
+    def _get_users(self):
+        url = "ext/settings/access/?action=getUsersForSection" \
+              "&sectionid={0}".format(self['sectionid'])
+
+        return Users(self._osm, self, self._accessor,
+                     self._accessor(url))
+
+    def _get_movers(self):
+        # Get the list of flexi record tables and look for "Moving On"
+        flexi_url = ('ext/members/flexirecords/?action=getFlexiRecords'
+                     '&sectionid={}&archived=n'.format(self['sectionid']))
+        flexi_records = self._accessor(flexi_url)
+
+        if not flexi_records:
+            log.warn("Can't access flexi records for {}"
+                     .format(self['sectionname']))
+            return None
+
+        moving_on_table = [item for item in flexi_records['items']
+                           if item['name'] == 'Moving On']
+
+        if not moving_on_table:
+            log.warn("No movers table for section {} ({})"
+                     .format(self['sectionname'], self['sectionid']))
+            return []
+
+        headers = self._accessor(('ext/members/flexirecords/?action=getStructure'
+                                  '&sectionid={}&extraid={}'.format(self['sectionid'],
+                                                                    moving_on_table[0]['extraid'])))
+
+        data = self._accessor(('ext/members/flexirecords/?action=getData&extraid={}&'
+                               'sectionid={}&termid={}'
+                               '&section=cubs'.format(moving_on_table[0]['extraid'],
+                                                      self['sectionid'],
+                                                      self.term['termid'])))
+
+        if headers and data:
+            return Movers(self._osm, self, self._accessor,
+                          headers, data)
+        return None
+
+
+
     def _get_members(self):
         url = "ext/members/contact/grid/?action=getMembers" \
               "&section_id={0}" \
@@ -722,6 +831,9 @@ class Section(OSMObject):
 
         return Programme(self._osm, self, self._accessor,
                          self._accessor(url))
+
+    def get_terms(self):
+        return [term for term in self._osm.terms(self['sectionid'])]
 
 
 class OSM(object):
