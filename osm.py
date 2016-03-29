@@ -407,6 +407,15 @@ class Members(OSMObject):
     def get_by_event_attendee(self, attendee):
         return self[attendee['scoutid']]
 
+    def is_member(self, scoutid):
+        """Return true is the scoutid is in this Members list."""
+        try:
+            if self[scoutid]:
+                return True
+            else:
+                return False
+        except KeyError:
+            return False
 
 class Movers(collections.Sequence):
 
@@ -547,7 +556,10 @@ class Events(collections.Sequence):
         return len(self._events)
 
     def get_by_name(self, name):
-        return [_ for _ in self._events if _['name'] == name][0]
+        try:
+            return [_ for _ in self._events if _['name'] == name][0]
+        except IndexError:
+            return None
 
 
 class Meeting(OSMObject):

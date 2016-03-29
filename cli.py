@@ -27,6 +27,7 @@ import datetime
 
 log = logging.getLogger(__name__)
 
+from dateutil import relativedelta
 from docopt import docopt
 import osm
 import tabulate
@@ -231,7 +232,7 @@ def movers_list(osm, auth, section, age=None, term=None,
     group = Group(osm, auth, MAPPING.keys(), term)
     section_ = group._sections.sections[Group.SECTIONIDS[section]]
 
-    headers = ['firstname', 'lastname', 'age',
+    headers = ['firstname', 'lastname', 'real_age', 'dob',
                "Date Parents Contacted", "Parents Preference",
                "Date Leaders Contacted", "Agreed Section",
                "Starting Date", "Leaving Date", "Notes", "Priority"]
@@ -242,10 +243,16 @@ def movers_list(osm, auth, section, age=None, term=None,
     if age:
         threshold = (365*float(age))
         now = datetime.datetime.now()
-        age = lambda dob: (now - datetime.datetime.strptime(dob,'%Y-%m-%d')).days
+        age_fn = lambda dob: (now - datetime.datetime.strptime(dob,'%Y-%m-%d')).days
 
         movers = [mover for mover in section_.movers
-                  if age(mover['dob']) > threshold]
+                  if age_fn(mover['dob']) > threshold]
+
+    now = datetime.datetime.now()
+    for mover in movers:
+        real_dob = datetime.datetime.strptime(mover['dob'],'%Y-%m-%d')
+        rel_age = relativedelta.relativedelta(now, real_dob)
+        mover['real_age'] = "{}.{}".format(rel_age.years, rel_age.months)
 
     rows = [[section_['sectionname']] +[member[header] for header in headers]
             for member in movers]
@@ -284,6 +291,9 @@ def events_attendees(osm, auth, section, event,
     group = Group(osm, auth, MAPPING.keys(), term)
     section_ = group._sections.sections[Group.SECTIONIDS[section]]
     ev = section_.events.get_by_name(event)
+    if not ev:
+        log.error("No such event: {}".format(event))
+        sys.exit(0)
     attendees = ev.attendees
     mapping = ev.fieldmap
     if attending_only:
@@ -302,7 +312,7 @@ def events_attendees(osm, auth, section, event,
         return out
 
     output = [fields(attendee)
-              for attendee in attendees]
+              for attendee in attendees if section_.members.is_member(attendee['scoutid'])]
     headers = [_[0] for _ in mapping] + list(extra_fields.values())
     if csv:
         w = csv_writer(sys.stdout)
