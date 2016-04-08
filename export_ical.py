@@ -48,12 +48,12 @@ def meeting2ical(section, event, i):
     e['description'] = orn(event['notesforparents'])
 
     if event.start_time.time() != datetime.time(0, 0, 0):
-        e.add('dtstart', event.start_time)
+        e.add('dtstart', event.start_time.astimezone())
     else:
         e.add('dtstart', event.start_time.date())
 
     if event.end_time.time() != datetime.time(0, 0, 0):
-        e.add('dtend', event.end_time)
+        e.add('dtend', event.end_time.astimezone())
     else:
         e.add('dtend', event.end_time.date())
 
@@ -69,12 +69,12 @@ def event2ical(section, event, i):
     e['location'] = orn(event['location'])
 
     if event.start_time.time() != datetime.time(0, 0, 0):
-        e.add('dtstart', event.start_time)
+        e.add('dtstart', event.start_time.astimezone())
     else:
         e.add('dtstart', event.start_time.date())
 
     if event.end_time.time() != datetime.time(0, 0, 0):
-        e.add('dtend', event.end_time)
+        e.add('dtend', event.end_time.astimezone())
     else:
         e.add('dtend', event.end_time.date())
 
