@@ -21,7 +21,11 @@ import logging
 from docopt import docopt
 import datetime
 import osm
-from icalendar import Calendar, Event
+from icalendar import Calendar, Event, Timezone,\
+    TimezoneStandard, TimezoneDaylight
+import pytz
+
+tz = pytz.timezone('Europe/London')
 
 NOW = datetime.datetime.now()
 
@@ -48,12 +52,12 @@ def meeting2ical(section, event, i):
     e['description'] = orn(event['notesforparents'])
 
     if event.start_time.time() != datetime.time(0, 0, 0):
-        e.add('dtstart', event.start_time.astimezone())
+        e.add('dtstart', event.start_time.astimezone(tz))
     else:
         e.add('dtstart', event.start_time.date())
 
     if event.end_time.time() != datetime.time(0, 0, 0):
-        e.add('dtend', event.end_time.astimezone())
+        e.add('dtend', event.end_time.astimezone(tz))
     else:
         e.add('dtend', event.end_time.date())
 
@@ -69,12 +73,12 @@ def event2ical(section, event, i):
     e['location'] = orn(event['location'])
 
     if event.start_time.time() != datetime.time(0, 0, 0):
-        e.add('dtstart', event.start_time.astimezone())
+        e.add('dtstart', event.start_time.astimezone(tz))
     else:
         e.add('dtstart', event.start_time.date())
 
     if event.end_time.time() != datetime.time(0, 0, 0):
-        e.add('dtend', event.end_time.astimezone())
+        e.add('dtend', event.end_time.astimezone(tz))
     else:
         e.add('dtend', event.end_time.date())
 
@@ -93,10 +97,31 @@ def _main(osm, auth, sections, outdir):
 
     osm_sections = osm.OSM(auth, Group.SECTIONIDS.values())
 
+    tzc = Timezone()
+    tzc.add('tzid', 'Europe/London')
+    tzc.add('x-lic-location', 'Europe/London')
+
+    tzs = TimezoneStandard()
+    tzs.add('tzname', 'GMT')
+    tzs.add('dtstart', datetime.datetime(1970, 10, 25, 2, 0, 0))
+    tzs.add('rrule', {'freq': 'yearly', 'bymonth': 10, 'byday': '-1su', 'interval': '1'})
+
+    tzd = TimezoneDaylight()
+    tzd.add('tzname', 'BST')
+    tzd.add('dtstart', datetime.datetime(1970, 3, 29, 1, 0, 0))
+    tzd.add('rrule', {'freq': 'yearly', 'bymonth': 3, 'byday': '-1su', 'interval': '1'})
+    tzd.add('TZOFFSETFROM', datetime.timedelta(hours=0))
+    tzd.add('TZOFFSETTO', datetime.timedelta(hours=1))
+
+
     for section in sections:
 
+        i = Calendar()
+        tzc.add_component(tzs)
+        tzc.add_component(tzd)
+        i.add_component(tzc)
+
         if section == "Group":
-            i = Calendar()
             i['x-wr-calname'] = '7th Lichfield: Group Calendar'
             i['X-WR-CALDESC'] = 'Current Programme'
             i['calscale'] = 'GREGORIAN'
@@ -117,7 +142,6 @@ def _main(osm, auth, sections, outdir):
         else:
             section_obj = osm_sections.sections[Group.SECTIONIDS[section]]
 
-            i = Calendar()
             i['x-wr-calname'] = '7th Lichfield: {}'.format(section)
             i['X-WR-CALDESC'] = '{} Programme'.format(section_obj.term['name'])
             i['calscale'] = 'GREGORIAN'
