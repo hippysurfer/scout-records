@@ -119,12 +119,13 @@ def export_section(token, name, directory, frm, to):
             cols = len(group4.columns) - 1
             rows = len(group4)
             worksheet.autofilter(0, 0, rows, cols)
-            worksheet.write(rows + 2, cols - 1, "Total", bold)
-            worksheet.write_formula(rows + 2, cols,
-                                    '=SUBTOTAL("109",{}:{})'.format(
-                                        xl_rowcol_to_cell(1, cols),
-                                        xl_rowcol_to_cell(rows, cols)),
-                                    bold)
+            worksheet.write(rows + 2, cols - 3, "Total", bold)
+            for col in (cols - 2, cols - 1, cols):
+                worksheet.write_formula(rows + 2, col,
+                                        '=SUBTOTAL("109",{}:{})'.format(
+                                            xl_rowcol_to_cell(1, col),
+                                            xl_rowcol_to_cell(rows, col)),
+                                        bold)
 
             worksheet = writer.sheets['Banks Transaction Breakdown']
             worksheet.set_zoom(90)
@@ -135,12 +136,13 @@ def export_section(token, name, directory, frm, to):
             cols = len(group2.columns)-1
             rows = len(group2)
             worksheet.autofilter(0, 0, rows, cols)
-            worksheet.write(rows+2, cols-1, "Total", bold)
-            worksheet.write_formula(rows + 2, cols,
-                                    '=SUBTOTAL("109",{}:{})'.format(
-                                        xl_rowcol_to_cell(1, cols),
-                                        xl_rowcol_to_cell(rows, cols)),
-                                    bold)
+            worksheet.write(rows+2, cols-3, "Total", bold)
+            for col in (cols - 2, cols - 1, cols):
+                worksheet.write_formula(rows + 2, col,
+                                        '=SUBTOTAL("109",{}:{})'.format(
+                                            xl_rowcol_to_cell(1, col),
+                                            xl_rowcol_to_cell(rows, col)),
+                                        bold)
             worksheet = writer.sheets['By Payment To GoCardless']
             worksheet.set_zoom(90)
             worksheet.set_column('A:A', 12)
@@ -152,12 +154,13 @@ def export_section(token, name, directory, frm, to):
             cols = len(frame.columns)-1
             rows = len(frame)
             worksheet.autofilter(0, 0, rows, cols)
-            worksheet.write(rows + 2, cols - 1, "Total", bold)
-            worksheet.write_formula(rows + 2, cols,
-                                    '=SUBTOTAL("109",{}:{})'.format(
-                                        xl_rowcol_to_cell(1, cols),
-                                        xl_rowcol_to_cell(rows, cols)),
-                                    bold)
+            worksheet.write(rows + 2, cols - 3, "Total", bold)
+            for col in (cols - 2, cols - 1, cols):
+                worksheet.write_formula(rows + 2, col,
+                                        '=SUBTOTAL("109",{}:{})'.format(
+                                            xl_rowcol_to_cell(1, col),
+                                            xl_rowcol_to_cell(rows, col)),
+                                        bold)
             return filename
 
     else:
