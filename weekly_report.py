@@ -20,25 +20,21 @@ Options:
 
 """
 
-import logging
-from docopt import docopt
-import osm
-import smtplib
-import socket
-import re
-import sys
 import datetime
-import os.path
-import itertools
-
+import logging
+import smtplib
+import sys
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-from group import Group
-from update import MAPPING
-from group import OSM_REF_FIELD
 import finance
 import google
+import osm
+import re
+from docopt import docopt
+from group import Group
+from group import OSM_REF_FIELD
+from update import MAPPING
 
 # import compass
 
@@ -617,7 +613,13 @@ def _main(osm, auth, sections, no_email, email, quarter, term, http):
     if isinstance(sections, str):
         sections = [sections, ]
 
-    group = Group(osm, auth, MAPPING.keys(), term)
+    important_fields = ['first_name',
+                        'last_name',
+                        'joined',
+                        'started',
+                        'date_of_birth']
+
+    group = Group(osm, auth, important_fields, term)
 
     for section in sections:
         assert section in list(group.SECTIONIDS.keys()) + ['Group', ], \
