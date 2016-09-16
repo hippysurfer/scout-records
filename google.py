@@ -5,7 +5,10 @@ log = logging.getLogger(__name__)
 
 import gspread
 from gspread.httpsession import HTTPSession
-from oauth2client.client import SignedJwtAssertionCredentials
+try:
+    from oauth2client.client import SignedJwtAssertionCredentials
+except:
+    log.warn("Can't import oauth2client.client")
 
 
 KEY_FILE = "key.pem"
@@ -16,7 +19,10 @@ SCOPE = ['https://spreadsheets.google.com/feeds',
 
 SIGNED_KEY = open(KEY_FILE, 'rb').read()
 
-CREDS = SignedJwtAssertionCredentials(ACCOUNT, SIGNED_KEY, SCOPE)
+try:
+    CREDS = SignedJwtAssertionCredentials(ACCOUNT, SIGNED_KEY, SCOPE)
+except:
+    pass
 
 MAX_ATTEMPTS = 10
 BACKOFF_FACTOR = 5

@@ -26,10 +26,10 @@ from datetime import datetime
 
 import gocardless_pro as gp
 
-#import requests
-#requests.__dummy__ = None
-#import requests_cache
-#requests_cache.install_cache('.gc_cache')
+# import requests
+# requests.__dummy__ = None
+# import requests_cache
+# requests_cache.install_cache('.gc_cache')
 
 import numpy as np
 import os
@@ -44,7 +44,9 @@ from gdrive_upload import upload
 
 log = logging.getLogger(__name__)
 
-MONTH_MAP = {1: "10", 2: "11", 3: "12", 4: "01", 5: "02", 6: "03", 7: "04", 8: "05", 9: "06", 10: "07", 11: "08", 12: "09"}
+MONTH_MAP = {1: "10", 2: "11", 3: "12", 4: "01", 5: "02", 6: "03", 7: "04", 8: "05", 9: "06", 10: "07", 11: "08",
+             12: "09"}
+
 
 def fetch_account(token, frm, to):
     client = gp.Client(access_token=token, environment='live')
@@ -82,6 +84,10 @@ def fetch_account(token, frm, to):
 
 def export_section(token, name, directory, frm, to):
     frame = fetch_account(token, frm.isoformat(), to.isoformat())
+    if frame is None:
+        log.warn("No payments found this month for {}".format(name))
+        return None
+
     cols = frame.columns.tolist()
     # Reorder the columns so that payment_net is first as it is easier to transcribe onto accounts.
     frame = frame[cols[:-3] + [cols[-1], cols[-3], cols[-2]]]
@@ -90,8 +96,8 @@ def export_section(token, name, directory, frm, to):
 
         # Create the page that lists each transaction/description. This allows you to see what income type makes up
         # each payment to the bank account.
-        frame2 = frame.drop(["customer_family_name","payment_status"], axis=1)
-        group = frame2.groupby(["payout_id","payout_date", "payment_description"], as_index=False)
+        frame2 = frame.drop(["customer_family_name", "payment_status"], axis=1)
+        group = frame2.groupby(["payout_id", "payout_date", "payment_description"], as_index=False)
         group2 = group.aggregate(np.sum)
         group2 = group2.sort("payout_date", ascending=True)
 
@@ -101,7 +107,11 @@ def export_section(token, name, directory, frm, to):
         group4 = group3.aggregate(np.sum)
         group4 = group4.sort("payout_date", ascending=True)
 
-        filename = os.path.join(directory, "{} {} {} {} GoCardless.xls".format(MONTH_MAP[to.month], to.day-1, to.strftime("%b"), name))
+        filename = os.path.join(directory, "{} {} {} {} {} GoCardless.xls".format(MONTH_MAP[to.month],
+                                                                                  to.day - 1,
+                                                                                  to.strftime("%b"),
+                                                                                  to.year,
+                                                                                  name))
 
         with pd.ExcelWriter(filename,
                             engine='xlsxwriter') as writer:
@@ -133,10 +143,10 @@ def export_section(token, name, directory, frm, to):
             worksheet.set_column('B:B', 12)
             worksheet.set_column('C:C', 50)
             worksheet.set_column('D:F', 16)
-            cols = len(group2.columns)-1
+            cols = len(group2.columns) - 1
             rows = len(group2)
             worksheet.autofilter(0, 0, rows, cols)
-            worksheet.write(rows+2, cols-3, "Total", bold)
+            worksheet.write(rows + 2, cols - 3, "Total", bold)
             for col in (cols - 2, cols - 1, cols):
                 worksheet.write_formula(rows + 2, col,
                                         '=SUBTOTAL("109",{}:{})'.format(
@@ -151,7 +161,7 @@ def export_section(token, name, directory, frm, to):
             worksheet.set_column('D:D', 50)
             worksheet.set_column('E:E', 18)
             worksheet.set_column('F:H', 16)
-            cols = len(frame.columns)-1
+            cols = len(frame.columns) - 1
             rows = len(frame)
             worksheet.autofilter(0, 0, rows, cols)
             worksheet.write(rows + 2, cols - 3, "Total", bold)
@@ -206,5 +216,6 @@ if __name__ == '__main__':
         filename = export_section(token, section, args['<outdir>'], frm, to)
 
         if args['--upload']:
-            upload(filename, DRIVE_FOLDERS[section],
-                   filename=os.path.splitext(os.path.split(filename)[1])[0])
+            if filename is not None:
+                upload(filename, DRIVE_FOLDERS[section],
+                       filename=os.path.splitext(os.path.split(filename)[1])[0])
