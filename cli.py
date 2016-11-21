@@ -12,6 +12,7 @@ Usage:
    cli [options] <apiid> <token> <section> events <event> info
    cli [options] <apiid> <token> <section> users list
    cli [options] <apiid> <token> <section> members badges
+   cli [options] <apiid> <token> member badges <firstname> <lastname>
    cli [options] <apiid> <token> <section> payments <start> <end>
 
 Options:
@@ -371,6 +372,40 @@ def members_badges(osm, auth, section, csv=False, no_headers=False, term=None):
         else:
             print(tabulate.tabulate(rows, tablefmt="plain"))
 
+
+def member_badges(osm, auth, firstname, lastname, csv=False, no_headers=False, term=None):
+    group = Group(osm, auth, MAPPING.keys(), term)
+
+    members = group.find_by_name(firstname, lastname)
+    #member = members[-1]
+    rows = []
+    for member in members:
+        for section_type in ('beavers', 'cubs', 'scouts'):
+            try:
+                badges = member.get_badges(section_type=section_type)
+                if badges is not None:
+                    for badge in [_ for _ in badges if _['awarded'] == '1']:
+                        rows.append([member['date_of_birth'], member['last_name'],
+                                     member['age'], section_type, member._section['sectionname'],
+                                     badge['badge'], datetime.date.fromtimestamp(int(badge['awarded_date'])).isoformat()])
+            except:
+                import traceback
+                traceback.print_exc()
+                pass
+
+    headers = ["DOB", "Last Name", "Age", "Section Type", "Section Name", "Badge"]
+
+    if csv:
+        w = csv_writer(sys.stdout)
+        if not no_headers:
+            w.writerow(list(headers))
+        w.writerows(rows)
+    else:
+        if not no_headers:
+            print(tabulate.tabulate(rows, headers=headers))
+        else:
+            print(tabulate.tabulate(rows, tablefmt="plain"))
+
 def payments(osm, auth, section, start, end):
     group = Group(osm, auth, MAPPING.keys(), None)
 
@@ -453,6 +488,14 @@ if __name__ == '__main__':
             members_badges(osm, auth, args['<section>'],
                        csv=args['--csv'],
                        no_headers=args['--no_headers'])
+        else:
+            log.error('unknown')
+    elif args['member']:
+        if args['badges']:
+            member_badges(osm, auth, args['<firstname>'],
+                           args['<lastname>'],
+                           csv=args['--csv'],
+                           no_headers=args['--no_headers'])
         else:
             log.error('unknown')
 
