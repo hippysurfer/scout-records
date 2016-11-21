@@ -3,7 +3,7 @@
 """Online Scout Manager Interface - generate report from subs.
 
 Usage:
-  subs_report.py [-d] [--term=<term>] [--email=<address>]
+  subs_report.py [-d] [-u] [--term=<term>] [--email=<address>]
          <apiid> <token> <outdir>
   subs_report.py (-h | --help)
   subs_report.py --version
@@ -12,6 +12,7 @@ Usage:
 Options:
   <outdir>       Output directory for vcard files.
   -d,--debug     Turn on debug output.
+  -u, --upload          Upload to Drive.
   --email=<email> Send to only this email address.
   --term=<term>  Which OSM term to use [default: current].
   -h,--help      Show this screen.
@@ -32,6 +33,10 @@ import logging
 import itertools
 import smtplib
 from docopt import docopt
+from datetime import date
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
+from dateutil.tz import tzutc
 
 from pandas.io.json import json_normalize
 import pandas as pd
@@ -40,12 +45,17 @@ from email.encoders import encode_base64
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 
+from gdrive_upload import upload
+
 log = logging.getLogger(__name__)
 
 DEF_CACHE = "osm.cache"
 DEF_CREDS = "osm.creds"
 
 FROM = "Richard Taylor <r.taylor@bcs.org.uk>"
+
+MONTH_MAP = {1: "10", 2: "11", 3: "12", 4: "01", 5: "02", 6: "03", 7: "04", 8: "05", 9: "06", 10: "07", 11: "08",
+             12: "09"}
 
 
 def send(to, subject, report_path, fro=FROM):
@@ -157,7 +167,7 @@ def fetch_section(group, acc, section, term):
     return c
 
 
-def _main(osm, auth, outdir, email, term):
+def _main(osm, auth, outdir, email, term, do_upload):
 
     assert os.path.exists(outdir) and os.path.isdir(outdir)
 
@@ -226,10 +236,16 @@ def _main(osm, auth, outdir, email, term):
     # all_gen_members[~all_gen_members['scoutid'].isin(gen['scoutid'].values)]
 
     # In[12]:
+    frm = datetime(date.today().year,
+                   (date.today() - relativedelta(months=+1)).month,
+                   4, 0, 0, 0, tzinfo=tzutc())
+    to = frm + relativedelta(months=+1)
+    filename = os.path.join(outdir, "{} {} {} {} Subs Report.xls".format(MONTH_MAP[to.month],
+                                                                         to.day - 1,
+                                                                         to.strftime("%b"),
+                                                                         to.year))
 
-    out_path = os.path.join(outdir, 'output.xlsx')
-
-    with pd.ExcelWriter(out_path,
+    with pd.ExcelWriter(filename,
                         engine='xlsxwriter') as writer:
 
         # Status of all subs.
@@ -267,8 +283,14 @@ def _main(osm, auth, outdir, email, term):
             axis=1, how='all').to_excel(writer, "Multiple  payers")
 
     if email:
-        send([email, ], "OSM Subs Report", out_path)
+        send([email, ], "OSM Subs Report", filename)
 
+
+    if do_upload:
+        from gc_accounts import SECTION_MAP, DRIVE_FOLDERS
+        if filename is not None:
+            upload(filename, DRIVE_FOLDERS['Group'],
+                   filename=os.path.splitext(os.path.split(filename)[1])[0])
 
 if __name__ == '__main__':
 
@@ -289,4 +311,4 @@ if __name__ == '__main__':
     auth.load_from_file(open(DEF_CREDS, 'r'))
 
     _main(osm, auth,
-          args['<outdir>'], args['--email'], args['--term'])
+          args['<outdir>'], args['--email'], args['--term'], args['--upload'])

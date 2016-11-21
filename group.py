@@ -44,6 +44,19 @@ class Group(object):
                    'Erasmus',
                    'Somers']
 
+    SECTION_TYPE = {
+        'Adult': 'adult',
+        'Paget': 'beavers',
+        'Swinfen': 'beavers',
+        'Maclean': 'cubs',
+        'Rowallan': 'cubs',
+        'Boswell': 'scouts',
+        'Johnson': 'scouts',
+        'Garrick': 'beavers',
+        'Erasmus': 'scouts',
+        'Somers': 'cubs'
+    }
+
     def __init__(self, osm, auth, important_fields, term=None, include_yl_as_yp=True):
         self._osm = osm
         self._important_fields = important_fields

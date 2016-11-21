@@ -110,7 +110,7 @@ class Accessor(object):
             expire_after=60 * 60)
 
     def __call__(self, query, fields=None, authorising=False,
-                 clear_cache=False, debug=False):
+                 clear_cache=False, debug=False, result_type='json'):
         if clear_cache:
             self.clear_cache()
 
@@ -142,12 +142,15 @@ class Accessor(object):
 
         # Crude test to see if the response is JSON
         # OSM returns a string as an error case.
-        try:
-            obj = result.json()
-        except:
-            log.warn("Result not JSON because: {0} not in "
-                     "('[', '{{')".format(result.text))
-            raise OSMException(url, values, result)
+        if result_type == 'json':
+            try:
+                obj = result.json()
+            except:
+                log.warn("Result not JSON because: {0} not in "
+                         "('[', '{{')".format(result.text))
+                raise OSMException(url, values, result)
+        else:
+            obj = result
 
         if debug:
             log.debug(pp.pformat(obj))
@@ -323,6 +326,24 @@ class Member(OSMObject):
                 if column['label'].lower().replace(" ", "") == tail.lower()][0]
 
         return value
+
+    def get_badges(self,section_type):
+        """Return a list of awarded badges"""
+        url = "ext/badges/badgesbyperson/?action=loadBadgesByMember&" \
+              "section={}" \
+              "&sectionid={}&term_id={}".format(
+            section_type,
+            int(self._section['sectionid']),
+            self._section.term['termid'])
+
+        badge_data = self._accessor(url)
+
+        my_badges = [member for member in badge_data['data']
+                     if member['scout_id'] == self['member_id']]
+
+
+        return my_badges[0]['badges'] if my_badges else None
+
 
     def __getattr__(self, key):
         try:
@@ -847,6 +868,15 @@ class Section(OSMObject):
     def get_terms(self):
         return [term for term in self._osm.terms(self['sectionid'])]
 
+    def get_payments(self, start, end):
+        url = "/ext/finances/onlinepayments/?action=exportWithdrawals" \
+              "&sectionid={0}" \
+              "&start={1}" \
+              "&end={2}" \
+            .format(self['sectionid'],
+                    start, end)
+
+        return self._accessor(url, result_type='csv')
 
 class OSM(object):
 

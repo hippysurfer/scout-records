@@ -11,6 +11,8 @@ Usage:
    cli [options] <apiid> <token> <section> events <event> attendees
    cli [options] <apiid> <token> <section> events <event> info
    cli [options] <apiid> <token> <section> users list
+   cli [options] <apiid> <token> <section> members badges
+   cli [options] <apiid> <token> <section> payments <start> <end>
 
 Options:
    -a, --attending       Only list those that are attending.
@@ -332,6 +334,50 @@ def users_list(osm, auth, section, csv=False, no_headers=False, term=None):
     for user in group._sections.sections[Group.SECTIONIDS[section]].users:
         print(user['firstname'])
 
+def members_badges(osm, auth, section, csv=False, no_headers=False, term=None):
+    group = Group(osm, auth, MAPPING.keys(), term)
+
+    #members = group._sections.sections[Group.SECTIONIDS[section]].members
+    members = group.section_yp_members_without_leaders(section)
+    rows = []
+    for member in members:
+        badges = member.get_badges(section_type=group.SECTION_TYPE[section])
+        if badges:
+            # If no badges - probably a leader
+            challenge_new = len([badge for badge in badges
+                                 if badge['awarded'] == '1' and badge['badge_group'] == '1'
+                                 and not badge['badge'].endswith('(Pre 2015)')])
+            challenge_old = len([badge for badge in badges
+                                 if badge['awarded'] == '1' and badge['badge_group'] == '1'
+                                 and badge['badge'].endswith('(Pre 2015)')])
+
+            activity = len([badge for badge in badges if badge['awarded'] == '1' and badge['badge_group'] == '2'])
+            staged = len([badge for badge in badges if badge['awarded'] == '1' and badge['badge_group'] == '3'])
+            core = len([badge for badge in badges if badge['awarded'] == '1' and badge['badge_group'] == '4'])
+
+            rows.append([member['date_of_birth'], member['last_name'], member['age'], section,
+                         challenge_new, challenge_old, activity, staged, core])
+
+    headers = ["DOB", "Last Name","Age", "Section Name", "Challenge", "Challenge_old", "Staged", "Activity", "Core"]
+
+    if csv:
+        w = csv_writer(sys.stdout)
+        if not no_headers:
+            w.writerow(list(headers))
+        w.writerows(rows)
+    else:
+        if not no_headers:
+            print(tabulate.tabulate(rows, headers=headers))
+        else:
+            print(tabulate.tabulate(rows, tablefmt="plain"))
+
+def payments(osm, auth, section, start, end):
+    group = Group(osm, auth, MAPPING.keys(), None)
+
+    osm_section = group._sections.sections[Group.SECTIONIDS[section]]
+    payments = osm_section.get_payments(start, end)
+
+    print(payments.content.decode())
 
 if __name__ == '__main__':
     level = logging.INFO
@@ -402,5 +448,15 @@ if __name__ == '__main__':
                        no_headers=args['--no_headers'])
         else:
             log.error('unknown')
+    elif args['members']:
+        if args['badges']:
+            members_badges(osm, auth, args['<section>'],
+                       csv=args['--csv'],
+                       no_headers=args['--no_headers'])
+        else:
+            log.error('unknown')
+
+    elif args['payments']:
+            payments(osm, auth, args['<section>'], args['<start>'], args['<end>'])
     else:
         log.error('unknown')
