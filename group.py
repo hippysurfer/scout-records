@@ -57,11 +57,12 @@ class Group(object):
         'Somers': 'cubs'
     }
 
-    def __init__(self, osm, auth, important_fields, term=None, include_yl_as_yp=True):
+    def __init__(self, osm, auth, important_fields, term=None, on_date=None,
+                 include_yl_as_yp=True):
         self._osm = osm
         self._important_fields = important_fields
         self._sections = self._osm.OSM(auth, self.SECTIONIDS.values(),
-                                       term)
+                                       term, on_date)
         self.include_yl_as_yp = include_yl_as_yp
 
     def section_all_members(self, section):
@@ -294,6 +295,22 @@ class Group(object):
                     raise
         return l
 
+    def find_by_scoutid_without_senior_duplicates(self, scoutid, section_wanted=None):
+        """Return a list of records with matching scoutids excluding senior duplicates"""
+        l = []
+        sections = self.all_yp_members_without_senior_duplicates_dict()
+        for section in sections.keys():
+            if (section_wanted and section_wanted != section):
+                continue
+            for member in sections[section]:
+                try:
+                    if (str(member['member_id']) == scoutid.strip()):
+                        l.append(member)
+                except:
+                    print(str(member))
+                    raise
+        return l
+
     # For each section we need to look at whether a member appears in a
     # senior section too (they will if they are in the process of
     # moving). If they are in a senior section we want to favour the
@@ -321,14 +338,19 @@ class Group(object):
                         if field == 'joined':
                             # We expect the joined field to be different.
                             continue
-                        if member[field] != senior_member[field]:
-                            log.warn('{} section: {} senior record'
-                                     'field mismatch ({}) "{}" != "{}"'
-                                     '\n {}\n\n'.format(
-                                         section, member[OSM_REF_FIELD],
-                                         field, member[field],
-                                         senior_member[field],
-                                         str(member)))
+                        try:
+                            if member[field] != senior_member[field]:
+                                log.warn('{} section: {} senior record'
+                                         'field mismatch ({}) "{}" != "{}"'
+                                         '\n {}\n\n'.format(
+                                             section, member[OSM_REF_FIELD],
+                                             field, member[field],
+                                             senior_member[field],
+                                             str(member)))
+                        except:
+                            log.warn("Failed to compare field {}".format(
+                                field
+                            ), exc_info=True)
             else:
                 kept_members.append(member)
         return kept_members

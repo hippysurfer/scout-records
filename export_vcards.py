@@ -153,8 +153,12 @@ def member2vcard(member, section):
     org.value = [section, ]
 
     bday = j.add('bday')
-    bday.value = datetime.datetime.strptime(
-        member['date_of_birth'], '%Y-%m-%d').strftime('%Y-%m-%d')
+    try:
+        bday.value = datetime.datetime.strptime(
+            member['date_of_birth'], '%Y-%m-%d').strftime('%Y-%m-%d')
+    except ValueError:
+        log.fatal("{!r}".format(member), exc_info=True)
+
 
     f = functools.partial(get, member=member, section='contact_primary_1')
     parent1 = "{} {}".format(f('firstname'),

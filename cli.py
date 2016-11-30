@@ -14,6 +14,8 @@ Usage:
    cli [options] <apiid> <token> <section> members badges
    cli [options] <apiid> <token> member badges <firstname> <lastname>
    cli [options] <apiid> <token> <section> payments <start> <end>
+   cli [options] <apiid> <token> group payments <outfile>
+
 
 Options:
    -a, --attending       Only list those that are attending.
@@ -27,6 +29,9 @@ Options:
 import logging
 
 import datetime
+import collections
+
+from io import StringIO
 
 log = logging.getLogger(__name__)
 
@@ -36,6 +41,7 @@ import osm
 import tabulate
 from csv import writer as csv_writer
 import sys
+import pandas as pd
 
 from group import Group
 from update import MAPPING
@@ -406,6 +412,7 @@ def member_badges(osm, auth, firstname, lastname, csv=False, no_headers=False, t
         else:
             print(tabulate.tabulate(rows, tablefmt="plain"))
 
+
 def payments(osm, auth, section, start, end):
     group = Group(osm, auth, MAPPING.keys(), None)
 
@@ -413,6 +420,109 @@ def payments(osm, auth, section, start, end):
     payments = osm_section.get_payments(start, end)
 
     print(payments.content.decode())
+
+
+def group_payments(osm, auth, outfile):
+    important_fields = ['first_name',
+                        'last_name',
+                        'joined',
+                        'started',
+                        'date_of_birth']
+
+    # Define payment schedules that we are interested in.
+    PAYMENT_DATES = collections.OrderedDict([
+        ('2016 - Spring Term - Part 1', datetime.date(2016, 1, 4)),
+        ('2016 - Spring Term - Part 2', datetime.date(2016, 2, 22)),
+        ('2016 - Summer Term - Part 1', datetime.date(2016, 4, 11)),
+        ('2016 - Summer Term - Part 2', datetime.date(2016, 6, 6)),
+        ('2016 - Autumn Term - Part 1', datetime.date(2016, 9, 5)),
+        ('2016 - Autumn Term - Part 2', datetime.date(2016, 10, 31))])
+
+    SCHEDULES = [
+        '2016 - Spring Term - Part 1',
+        '2016 - Spring Term - Part 2',
+        '2016 - Summer Term - Part 1',
+        '2016 - Summer Term - Part 2',
+        '2016 - Autumn Term - Part 1']
+
+    # Payment amounts. Assumes all schedules use the same quantity.
+    GENERAL_AMOUNT = 17.95
+    DISCOUNT_AMOUNT = 12.13
+
+    # Fetch all of the available data for each term on which a payment is due.
+    group_by_date = {}
+    for name, date in PAYMENT_DATES.items():
+        group_by_date[name] = Group(osm, auth, important_fields, on_date=date)
+
+    # Get a list of all members in all terms accross the whole group.
+    all_yp_members = []
+    for group in group_by_date.values():
+        all_yp_members.extend(group.all_yp_members_without_leaders())
+
+    all_yp_by_scout_id = {member['member_id']:member for member in all_yp_members}
+
+    # Get the current group data for the current term.
+    current = Group(osm, auth, important_fields)
+
+    
+    res = []
+    for scoutid, member in all_yp_by_scout_id.items():
+        current_member = current.find_by_scoutid_without_senior_duplicates(str(scoutid))
+        section = current_member[0]._section['sectionname'] if len(current_member) else 'Unknown'
+        d = collections.OrderedDict((('scoutid', scoutid), ('First name', member['first_name']),
+                                     ('Last name', member['last_name']), ('joined', member['started']),
+                                     ('left', member['end_date']),
+                                     ('section', section)))
+
+        joined = datetime.datetime.strptime(member['started'], "%Y-%m-%d").date()
+        ended = datetime.datetime.strptime(member['end_date'], "%Y-%m-%d").date() if member['end_date'] else False
+
+        amount = DISCOUNT_AMOUNT if member['customisable_data.cf_subs_type_n_g_d_'] == 'D' else GENERAL_AMOUNT
+
+        for schedule, date_ in PAYMENT_DATES.items():
+            d[schedule] = amount if ((joined < date_ and not ended) or
+                                     (joined < date_ and ended > date_)) else 0
+        res.append(d)
+
+    tbl = pd.DataFrame(res)
+    tbl.set_index(["Last name", "First name"], inplace=True)
+
+    all_sections = list(Group.SECTIONIDS.keys())
+
+    def fetch_section(section_name):
+        section = group._sections.sections[Group.SECTIONIDS[section_name]]
+        payments = section.get_payments('2015-09-04', '2016-10-03')
+        return pd.read_csv(StringIO(payments.content.decode())) if payments is not None else pd.DataFrame()
+
+    all = pd.concat([fetch_section(name) for name in all_sections], ignore_index=True)
+
+
+    all['Schedule'] = all['Schedule'].str.replace('^General Subscriptions.*$', 'General Subscriptions')
+    all['Schedule'] = all['Schedule'].str.replace('^Discounted Subscriptions.*$', 'Discounted Subscriptions')
+    subs = all[(all['Schedule'] == 'General Subscriptions') | (all['Schedule'] == 'Discounted Subscriptions')]
+
+    pv = pd.pivot_table(subs, values='Net', index=['Last name', 'First name'], columns=['Schedule', 'Payment'])
+    for schedule in SCHEDULES:
+        pv['General Subscriptions'][schedule].fillna(
+            pv['Discounted Subscriptions'][schedule], inplace=True)
+    del pv['Discounted Subscriptions']
+    pv.columns = pv.columns.droplevel()
+    del pv['2015/Q3']
+
+    combined = tbl.join(pv, lsuffix='_est', rsuffix='_act', how='outer')
+
+    for schedule in SCHEDULES:
+        for suffix in ['_est', '_act']:
+            combined[schedule + suffix].fillna(0, inplace=True)
+
+    for schedule in SCHEDULES:
+        combined[schedule + '_var'] = combined.apply(lambda row: row[schedule + '_est'] - row[schedule + '_act'],
+                                                     axis=1)
+
+    combined.to_excel(outfile, sheet_name="Data", merge_cells=False)
+
+
+
 
 if __name__ == '__main__':
     level = logging.INFO
@@ -496,6 +606,12 @@ if __name__ == '__main__':
                            args['<lastname>'],
                            csv=args['--csv'],
                            no_headers=args['--no_headers'])
+        else:
+            log.error('unknown')
+
+    elif args['group']:
+        if args['payments']:
+            group_payments(osm, auth, args['<outfile>'])
         else:
             log.error('unknown')
 

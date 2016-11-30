@@ -197,8 +197,8 @@ class Term(OSMObject):
         self.enddate = datetime.datetime.strptime(record['enddate'],
                                                   '%Y-%m-%d')
 
-    def is_active(self):
-        now = datetime.datetime.now().date()
+    def is_active(self, date=None):
+        now = datetime.datetime.now().date() if date is None else date
         return (self.startdate.date() <= now) and (self.enddate.date() >= now)
 
     def __repr__(self):
@@ -673,10 +673,11 @@ class Programme(OSMObject):
 
 class Section(OSMObject):
 
-    def __init__(self, osm, accessor, record, init=True, term=None):
+    def __init__(self, osm, accessor, record, init=True, term=None, on_date=None):
         OSMObject.__init__(self, osm, accessor, record)
 
         self.requested_term = term
+        self.requested_date = on_date
 
         if init:
             self.init()
@@ -695,7 +696,16 @@ class Section(OSMObject):
                     ",".join([term['name'] for term in self.terms]),
                     self['sectionname']))
                 #sys.exit(1)
+        elif self.requested_date is not None:
+            # We have requested a specific date. Need to find the term that encloses that date.
+            self.terms = [term for term in self._osm.terms(self['sectionid'])
+                          if term.is_active(self.requested_date)]
 
+            if len(self.terms) != 1:
+                log.warn("Cannot find a term that encloses the requested date ({})"
+                         "for section {} terms ({})".format(
+                    self.requested_date,
+                    self['sectionname'], ",".join([term['name'] for term in self.terms]), ))
         else:
             self.terms = [term for term in self._osm.terms(self['sectionid'])]
             log.debug("All terms = {!r}".format(self.terms))
@@ -880,21 +890,21 @@ class Section(OSMObject):
 
 class OSM(object):
 
-    def __init__(self, authorisor, sectionid_list=False, term=None):
+    def __init__(self, authorisor, sectionid_list=False, term=None, on_date=None):
         self._accessor = Accessor(authorisor)
 
         self.sections = {}
         self.section = None
 
-        self.init(sectionid_list, term)
+        self.init(sectionid_list, term, on_date)
 
-    def init(self, sectionid_list=False, term=None):
+    def init(self, sectionid_list=False, term=None, on_date=None):
         roles = self._accessor('api.php?action=getUserRoles')
 
         self.sections = {}
 
         for section in [Section(self, self._accessor, role,
-                                init=False, term=term)
+                                init=False, term=term, on_date=on_date)
                         for role in roles
                         if 'section' in role]:
             if sectionid_list is False or \
