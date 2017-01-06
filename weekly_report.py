@@ -38,7 +38,7 @@ from update import MAPPING
 
 # import compass
 
-PERSONAL_REFERENCE_RE = re.compile('^[A-Z0-9]{4}-[A-Z]{2}-\d{6}$')
+#PERSONAL_REFERENCE_RE = re.compile('^[A-Z0-9]{4}-[A-Z]{2}-\d{6}$')
 
 FROM = "Richard Taylor <r.taylor@bcs.org.uk>"
 TO = {'Group': ['hippysurfer@gmail.com',
@@ -171,6 +171,10 @@ def check_bad_data(r, group, section):
         'Erasmus': 15
     }
 
+    subs_members_ids = [member[OSM_REF_FIELD] for member in
+                        group.section_all_members(group.SUBS_SECTION)]
+    all_yp_members_without_senior_duplicates = group.all_yp_members_without_senior_duplicates()
+
     members = group.section_yp_members_without_leaders(section) if \
         section != 'Adult' else group.section_all_members(section)
 
@@ -182,16 +186,16 @@ def check_bad_data(r, group, section):
             report.append("Sex ({}) not in 'M', 'F', 'Male', 'Female'".format(
                 member['floating.gender']))
 
-        if member['customisable_data.PersonalReference'].strip() == '':
-            report.append("<b>Missing Personal Reference,</b>")
+        #if member['customisable_data.PersonalReference'].strip() == '':
+        #    report.append("<b>Missing Personal Reference,</b>")
 
-        elif not PERSONAL_REFERENCE_RE.match(
-                member['customisable_data.PersonalReference'].strip()):
-            report.append("<b>Bad Personal Reference ('{}')"
-                          " must match pattern: SSSS-FF-DDMMYY</b>".format(
-                member['customisable_data.PersonalReference'].strip()))
+        #elif not PERSONAL_REFERENCE_RE.match(
+        #        member['customisable_data.PersonalReference'].strip()):
+        #    report.append("<b>Bad Personal Reference ('{}')"
+        #                  " must match pattern: SSSS-FF-DDMMYY</b>".format(
+        #        member['customisable_data.PersonalReference'].strip()))
 
-        if section != 'Adult':
+        if section in group.YP_SECTIONS:
             if member['contact_primary_1.address1'].strip() == '':
                 report.append("Primary Address missing")
 
@@ -206,6 +210,14 @@ def check_bad_data(r, group, section):
                 report.append("Age ({}) is out of range ({} - {})".format(
                     int(member.age().days / 365),
                     MIN_AGE[section], MAX_AGE[section]))
+
+            if member[OSM_REF_FIELD] not in subs_members_ids:
+                report.append("Not in Subs Section")
+
+        elif section == group.SUBS_SECTION:
+            if member not in all_yp_members_without_senior_duplicates:
+                report.append("Not in any YP section.")
+
         else:
 
             if member['contact_primary_member.address1'].strip() == '':
@@ -227,146 +239,146 @@ def check_bad_data(r, group, section):
             r.ul(report[1])
 
 
-def process_finance_spreadsheet(r, group, quarter):
-    log.info("Processing finance spreadsheet...")
-
-    gc = google.conn()
-
-    fin = gc.open(finance.FINANCE_SPREADSHEET_NAME)
-    # fin = gc.open_by_key('0AobgMqwG6nlpdHdocFkwVVhNd2pGbTBRX1pCanBVdVE')
-
-    # Fetch list of personal references from the finance spreadsheet
-    # along with the current "Q4" section.
-    wks = fin.worksheet(finance.DETAIL_WKS)
-    headings = wks.row_values(finance.FIN_HEADER_ROW)
-    fin_references = wks.col_values(
-        1 + headings.index(
-            finance.FIN_MAPPING_DETAILS[OSM_REF_FIELD])
-    )[finance.FIN_HEADER_ROW:]
-
-    # TODO: Parameterise the selection of the current quarter.
-    # q4_section = wks.col_values(
-    #    1 + headings.index('{} Sec'.format(quarter)))[finance.FIN_HEADER_ROW:]
-
-    group.set_yl_as_yp(False)
-    all_yp = group.all_yp_members_without_senior_duplicates_dict()
-
-    # create a map from refs to members for later lookup
-    all_members = {}
-    for name, section_members in all_yp.items():
-        for member in section_members:
-            all_members[member[OSM_REF_FIELD]] = member
-
-    # Create a list of all YP that are not on the finance list.
-    # get list of all references from sections
-    new_members = []
-    for name, section_members in all_yp.items():
-        for member in section_members:
-            if member[OSM_REF_FIELD] not in fin_references:
-                member['SeniorSection'] = name
-                new_members.append(member)
-
-    r.sub_title("Finance Spreadsheet")
-    r.p("The following members appear in the sections in OSM but do not appear"
-        " on the Finance Spreadsheet. (New Members)")
-    headings = [('Patrol', 'patrol'),
-                ('SeniorSection', 'SeniorSection'),
-                ('PersonalReference', 'customisable_data.PersonalReference'),
-                ('Membership', 'customisable_data.membershipno'),
-                ('Firstname', 'first_name'),
-                ('Lastname', 'last_name'),
-                ('PersonalEmail', 'contact_primary_member.email1'),
-                ('DadEmail', 'contact_primary_2.email1'),
-                ('MumEmail', 'contact_primary_1.email1'),
-                ('dob', 'date_of_birth'),
-                ('Joined', 'joined'),
-                ('Started', 'started')]
-
-    r.t_start([h[0] for h in headings])
-    for member in new_members:
-        r.t_row([member[k[1]] for k in headings])
-    r.t_end()
-
-    # Create a list of all YP that are on the finance list but are not
-    # in OSM.
-    all_osm_references = []
-    for name, section_members in all_yp.items():
-        all_osm_references.extend([member[OSM_REF_FIELD].strip()
-                                   for member in section_members])
-
-    missing_references = []
-    for ref in fin_references:
-        if ref and (ref.strip() not in all_osm_references):
-            missing_references.append(ref)
-
-    r.p("The following members appear in the Finance Spreadsheet but "
-        "do not appear in the sections on OSM. (Old Member)")
-
-    headings = [('Membership', 'customisable_data.membershipno'),
-                ('Firstname', 'first_name'),
-                ('Lastname', 'last_name'),
-                ('Patrol', 'patrol')]
-
-    r.t_start([h[0] for h in headings])
-
-    for ref in missing_references:
-        if not ref:
-            log.warn("Ignoring null reference.")
-            continue
-        member = group.find_by_ref(ref)
-        if len(member) > 0:
-            r.t_row([member[0][k[1]] for k in headings])
-        else:
-            r.t_row([ref, ])
-
-    r.t_end()
-
-    # # Create a list of all YP who are on the finanace list but are not
-    # # in the same section in OSM.
-    # section_map = {'Maclean': 'MP',
-    #                'Rowallan': 'RP',
-    #                'Somers': 'SP',
-    #                'Swinfen': 'BC',
-    #                'Garrick': 'GC',
-    #                'Boswell': 'BT',
-    #                'Johnson': 'JT',
-    #                'Erasmus': 'ET',
-    #                'Paget': 'PC'}
-
-    # log.debug("fin_references - {}".format(fin_references))
-    # log.debug("q_section - {}".format(q4_section))
-
-    # changed_members = []
-    # for name, section_members in all_yp.items():
-    #     for member in section_members:
-    #         log.debug("member = {}".format(member))
-    #         if member[OSM_REF_FIELD] in fin_references:
-    #             try:
-    #                 previous_section = q4_section[fin_references.index(
-    #                     member[OSM_REF_FIELD])]
-    #             except IndexError:
-    #                 # If the spreadsheet does not have enough columns we assume that
-    #                 # the previous section was None: i.e. this is a new YP.
-    #                 previous_section = ""
-
-    #             if section_map[name] != previous_section:
-    #                 changed_members.append((member,
-    #                                         previous_section,
-    #                                         section_map[name]))
-
-    # r.p("The following have moved sections on OSM but are "
-    #     "still recorded in their old section in the Finance "
-    #     "Spreadsheet (Changed members)")
-    # r.t_start(["Membership", "Old", "New", "First", "Last"])
-    # for member in changed_members:
-    #     r.t_row([
-    #         member[0][OSM_REF_FIELD],
-    #         member[1],
-    #         member[2],
-    #         all_members[member[0][OSM_REF_FIELD]]['first_name'],
-    #         all_members[member[0][OSM_REF_FIELD]]['last_name']])
-
-    # r.t_end()
+# def process_finance_spreadsheet(r, group, quarter):
+#     log.info("Processing finance spreadsheet...")
+#
+#     gc = google.conn()
+#
+#     fin = gc.open(finance.FINANCE_SPREADSHEET_NAME)
+#     # fin = gc.open_by_key('0AobgMqwG6nlpdHdocFkwVVhNd2pGbTBRX1pCanBVdVE')
+#
+#     # Fetch list of personal references from the finance spreadsheet
+#     # along with the current "Q4" section.
+#     wks = fin.worksheet(finance.DETAIL_WKS)
+#     headings = wks.row_values(finance.FIN_HEADER_ROW)
+#     fin_references = wks.col_values(
+#         1 + headings.index(
+#             finance.FIN_MAPPING_DETAILS[OSM_REF_FIELD])
+#     )[finance.FIN_HEADER_ROW:]
+#
+#     # TODO: Parameterise the selection of the current quarter.
+#     # q4_section = wks.col_values(
+#     #    1 + headings.index('{} Sec'.format(quarter)))[finance.FIN_HEADER_ROW:]
+#
+#     group.set_yl_as_yp(False)
+#     all_yp = group.all_yp_members_without_senior_duplicates_dict()
+#
+#     # create a map from refs to members for later lookup
+#     all_members = {}
+#     for name, section_members in all_yp.items():
+#         for member in section_members:
+#             all_members[member[OSM_REF_FIELD]] = member
+#
+#     # Create a list of all YP that are not on the finance list.
+#     # get list of all references from sections
+#     new_members = []
+#     for name, section_members in all_yp.items():
+#         for member in section_members:
+#             if member[OSM_REF_FIELD] not in fin_references:
+#                 member['SeniorSection'] = name
+#                 new_members.append(member)
+#
+#     r.sub_title("Finance Spreadsheet")
+#     r.p("The following members appear in the sections in OSM but do not appear"
+#         " on the Finance Spreadsheet. (New Members)")
+#     headings = [('Patrol', 'patrol'),
+#                 ('SeniorSection', 'SeniorSection'),
+#                 #('PersonalReference', 'customisable_data.PersonalReference'),
+#                 ('Membership', 'customisable_data.membershipno'),
+#                 ('Firstname', 'first_name'),
+#                 ('Lastname', 'last_name'),
+#                 ('PersonalEmail', 'contact_primary_member.email1'),
+#                 ('DadEmail', 'contact_primary_2.email1'),
+#                 ('MumEmail', 'contact_primary_1.email1'),
+#                 ('dob', 'date_of_birth'),
+#                 ('Joined', 'joined'),
+#                 ('Started', 'started')]
+#
+#     r.t_start([h[0] for h in headings])
+#     for member in new_members:
+#         r.t_row([member[k[1]] for k in headings])
+#     r.t_end()
+#
+#     # Create a list of all YP that are on the finance list but are not
+#     # in OSM.
+#     all_osm_references = []
+#     for name, section_members in all_yp.items():
+#         all_osm_references.extend([member[OSM_REF_FIELD].strip()
+#                                    for member in section_members])
+#
+#     missing_references = []
+#     for ref in fin_references:
+#         if ref and (ref.strip() not in all_osm_references):
+#             missing_references.append(ref)
+#
+#     r.p("The following members appear in the Finance Spreadsheet but "
+#         "do not appear in the sections on OSM. (Old Member)")
+#
+#     headings = [('Membership', 'customisable_data.membershipno'),
+#                 ('Firstname', 'first_name'),
+#                 ('Lastname', 'last_name'),
+#                 ('Patrol', 'patrol')]
+#
+#     r.t_start([h[0] for h in headings])
+#
+#     for ref in missing_references:
+#         if not ref:
+#             log.warn("Ignoring null reference.")
+#             continue
+#         member = group.find_by_ref(ref)
+#         if len(member) > 0:
+#             r.t_row([member[0][k[1]] for k in headings])
+#         else:
+#             r.t_row([ref, ])
+#
+#     r.t_end()
+#
+#     # # Create a list of all YP who are on the finanace list but are not
+#     # # in the same section in OSM.
+#     # section_map = {'Maclean': 'MP',
+#     #                'Rowallan': 'RP',
+#     #                'Somers': 'SP',
+#     #                'Swinfen': 'BC',
+#     #                'Garrick': 'GC',
+#     #                'Boswell': 'BT',
+#     #                'Johnson': 'JT',
+#     #                'Erasmus': 'ET',
+#     #                'Paget': 'PC'}
+#
+#     # log.debug("fin_references - {}".format(fin_references))
+#     # log.debug("q_section - {}".format(q4_section))
+#
+#     # changed_members = []
+#     # for name, section_members in all_yp.items():
+#     #     for member in section_members:
+#     #         log.debug("member = {}".format(member))
+#     #         if member[OSM_REF_FIELD] in fin_references:
+#     #             try:
+#     #                 previous_section = q4_section[fin_references.index(
+#     #                     member[OSM_REF_FIELD])]
+#     #             except IndexError:
+#     #                 # If the spreadsheet does not have enough columns we assume that
+#     #                 # the previous section was None: i.e. this is a new YP.
+#     #                 previous_section = ""
+#
+#     #             if section_map[name] != previous_section:
+#     #                 changed_members.append((member,
+#     #                                         previous_section,
+#     #                                         section_map[name]))
+#
+#     # r.p("The following have moved sections on OSM but are "
+#     #     "still recorded in their old section in the Finance "
+#     #     "Spreadsheet (Changed members)")
+#     # r.t_start(["Membership", "Old", "New", "First", "Last"])
+#     # for member in changed_members:
+#     #     r.t_row([
+#     #         member[0][OSM_REF_FIELD],
+#     #         member[1],
+#     #         member[2],
+#     #         all_members[member[0][OSM_REF_FIELD]]['first_name'],
+#     #         all_members[member[0][OSM_REF_FIELD]]['last_name']])
+#
+#     # r.t_end()
 
 
 # def section_compass_check(r, group, section):

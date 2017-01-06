@@ -684,6 +684,10 @@ class Section(OSMObject):
 
     def init(self):
         log.debug("Requested term = {}".format(self.requested_term))
+
+        self.all_terms = [term for term in self._osm.terms(self['sectionid'])]
+        log.debug("All terms = {!r}".format(self.all_terms))
+
         if self.requested_term is not None:
             # We have requested a specific term.
             self.terms = [term for term in self._osm.terms(self['sectionid'])
@@ -707,9 +711,6 @@ class Section(OSMObject):
                     self.requested_date,
                     self['sectionname'], ",".join([term['name'] for term in self.terms]), ))
         else:
-            self.terms = [term for term in self._osm.terms(self['sectionid'])]
-            log.debug("All terms = {!r}".format(self.terms))
-
             self.terms = [term for term in self._osm.terms(self['sectionid'])
                           if term.is_active()]
 

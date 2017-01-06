@@ -5,8 +5,8 @@ import osm
 log = logging.getLogger(__name__)
 
 # OSM_REF_FIELD = 'customisable_data.membershipno'
-OSM_REF_FIELD = 'customisable_data.PersonalReference'
-
+# OSM_REF_FIELD = 'customisable_data.PersonalReference'
+OSM_REF_FIELD = 'member_id'
 
 class Member(osm.Member):
 
@@ -29,10 +29,12 @@ class Group(object):
                   'Johnson': '5882',
                   'Garrick': '20711',
                   'Erasmus': '20707',
-                  'Somers': '20706'}
+                  'Somers': '20706',
+                  'Subs': '33593'}
     # 'Waiting List': ""}
 
     ADULT_SECTION = 'Adult'
+    SUBS_SECTION = "Subs"
 
     YP_SECTIONS = ['Paget',
                    'Swinfen',
@@ -46,6 +48,7 @@ class Group(object):
 
     SECTION_TYPE = {
         'Adult': 'adult',
+        'Subs': 'adult',
         'Paget': 'beavers',
         'Swinfen': 'beavers',
         'Maclean': 'cubs',
@@ -266,18 +269,18 @@ class Group(object):
                     l.append(member)
         return l
 
-    def find_by_ref(self, ref, section_wanted=None):
-        """Return a list of records with matching refs"""
-        l = []
-        sections = self.all_yp_members_dict()
-        for section in sections.keys():
-            if (section_wanted and section_wanted != section):
-                continue
-            for member in sections[section]:
-                if (member[OSM_REF_FIELD].lower().strip() ==
-                        ref.lower().strip()):
-                    l.append(member)
-        return l
+    #def find_by_ref(self, ref, section_wanted=None):
+    #    """Return a list of records with matching refs"""
+    #    l = []
+    #    sections = self.all_yp_members_dict()
+    #    for section in sections.keys():
+    #        if (section_wanted and section_wanted != section):
+    #            continue
+    #        for member in sections[section]:
+    #            if (member[OSM_REF_FIELD].lower().strip() ==
+    #                    ref.lower().strip()):
+    #                l.append(member)
+    #    return l
 
     def find_by_scoutid(self, scoutid, section_wanted=None):
         """Return a list of records with matching scoutids"""

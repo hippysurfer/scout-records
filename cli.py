@@ -180,7 +180,13 @@ def census_leavers(osm, auth, term=None, csv=False,
               'Spring 2015',
               'Summer 2015',
               'Autumn 2015',
-              'Spring 2016']]
+              'Spring 2016',
+              'Summer 2016',
+              'Autumn 2016',
+              'Spring 2017',
+              'Summer 2017',
+              'Autumn 2017',
+              ]]
 
     pairs =[(terms[x],terms[x+1]) for x in range(len(terms)-1)]
 

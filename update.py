@@ -89,14 +89,14 @@ MAPPING = {'first_name': 'Firstname',
            #'DadDBS': 'Dad DBS',
            #'MumDBS': 'Mum DBS',
            'floating.gender': 'Sex',
-           'contact_primary_2.occupation': 'Fathers Occupation',
-           'contact_primary_1.occupation': 'Mothers Occupation',
+           #'contact_primary_2.occupation': 'Fathers Occupation',
+           #'contact_primary_1.occupation': 'Mothers Occupation',
            #'Datetonextsection': 'Date to next section',
            #'BeaverColony': 'Beaver Colony',
            #'CubPack': 'Cub Pack',
            #'ScoutTroop': 'Scout Troop',
-           'customisable_data.FamilyReference': 'Family Reference',
-           'customisable_data.PersonalReference': 'Personal Reference',
+           #'customisable_data.FamilyReference': 'Family Reference',
+           #'customisable_data.PersonalReference': 'Personal Reference',
            #'Ethnicity': 'Ethnicity'
            }
 

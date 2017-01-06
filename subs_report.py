@@ -236,7 +236,7 @@ def _main(osm, auth, outdir, email, term, do_upload):
     # all_gen_members[~all_gen_members['scoutid'].isin(gen['scoutid'].values)]
 
     # In[12]:
-    frm = datetime(date.today().year,
+    frm = datetime((date.today() - relativedelta(months=+1)).year,
                    (date.today() - relativedelta(months=+1)).month,
                    4, 0, 0, 0, tzinfo=tzutc())
     to = frm + relativedelta(months=+1)

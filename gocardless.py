@@ -194,7 +194,7 @@ if __name__ == '__main__':
         args['--month'] = int(args['--month'])
 
     if args['--year'] in [None, 'current']:
-        args['--year'] = date.today().year
+        args['--year'] = (date.today() - relativedelta(months=+1)).year
     else:
         args['--year'] = int(args['--year'])
 
