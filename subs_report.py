@@ -237,15 +237,7 @@ def _main(osm, auth, outdir, email, term, do_upload):
         al_only_subs.duplicated('scoutid', take_last=True) |
         al_only_subs.duplicated('scoutid')]
 
-    # In[11]:
-
-    # Not used ?
-    # gen = al[al['scheme'] == 'General Subscriptions'].dropna(axis=1, how='all')
-    # all_gen_members = all_members_df[all_members_df['subs_type'] == 'G']
-    # all_gen_members['scoutid'] = all_gen_members['scoutid'].astype(str)
-    # all_gen_members[~all_gen_members['scoutid'].isin(gen['scoutid'].values)]
-
-    # In[12]:
+    # Calculate file name
     frm = datetime((date.today() - relativedelta(months=+1)).year,
                    (date.today() - relativedelta(months=+1)).month,
                    4, 0, 0, 0, tzinfo=tzutc())

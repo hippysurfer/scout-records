@@ -4,7 +4,7 @@
 Usage:
   osm.py <apiid> <token> [-d] [-s=<sectionid>]
   osm.py <apiid> <token> [-d] [-s=<sectionid>] run <query>
-  osm.py <apiid> <token> [-d] -a <email> <password>
+  osm.py <apiid> <token> [-d] -a <cred_file> <email> <password>
   osm.py (-h | --help)
   osm.py --version
 
@@ -963,7 +963,7 @@ if __name__ == '__main__':
         auth = Authorisor(args['<apiid>'], args['<token>'])
         auth.authorise(args['<email>'],
                        args['<password>'])
-        auth.save_to_file(open(DEF_CREDS, 'w'))
+        auth.save_to_file(open(args['<cred_file>'], 'w'))
         sys.exit(0)
 
     sectionid_list = [args['-s'], ] if args['-s'] else False
