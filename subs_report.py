@@ -44,9 +44,13 @@ from email.encoders import encode_base64
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 
-from gdrive_upload import upload
-
 log = logging.getLogger(__name__)
+
+try:
+    from gdrive_upload import upload
+except:
+    log.warning("Failed to import gdrive_upload.")
+
 
 DEF_CACHE = "osm.cache"
 DEF_CREDS = "osm.creds"
