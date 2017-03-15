@@ -21,6 +21,7 @@ Options:
 
 """
 
+from collections import OrderedDict
 import datetime
 import logging
 import smtplib
@@ -49,9 +50,9 @@ TO = {'Group': ['hippysurfer@gmail.com',
       'Paget': ['riddleshome@gmail.com'],
       'Rowallan': ['markjoint@hotmail.co.uk'],
       'Johnson': ['simon@scouting.me.uk'],
-      'Boswell': ['marc.henson@7thlichfield.org.uk'],
+      'Boswell': ['boswell@7thlichfield.org.uk'],
       'Erasmus': ['paul@scouting.me.uk'],
-      'Adult': ['susanjowen@btinternet.com']}
+      'Adult': []}
 
 DEF_CACHE = "osm.cache"
 DEF_CREDS = "osm.creds"
@@ -333,12 +334,20 @@ def census(r, group):
     for i in ['Beavers', 'Cubs', 'Scouts']:
         r.t_start(['Section', 'Sex'] +
                   ["age - {} yrs".format(str(age))
-                   for age in sorted(census_[i]['M'].keys())])
-        r.t_row([i, 'Male'] + [census_[i]['M'][j] for j
-                               in sorted(census_[i]['M'].keys())])
-        r.t_row([i, 'Female'] + [census_[i]['F'][j] for j
-                                 in sorted(census_[i]['F'].keys())])
+                   for age in sorted(census_[i]['M'].keys())] +
+                  ['Total'])
+        male_counts = [census_[i]['M'][j] for j in sorted(census_[i]['M'].keys())]
+        r.t_row([i, 'Male'] + male_counts + [sum(male_counts),])
+
+        female_counts = [census_[i]['F'][j] for j in sorted(census_[i]['F'].keys())]
+        r.t_row([i, 'Female'] + female_counts + [sum(female_counts),])
+
+        other_counts = [census_[i]['O'][j] for j in sorted(census_[i]['O'].keys())]
+        r.t_row([i, 'Other'] + other_counts + [sum(other_counts), ])
+
         r.t_end()
+        r.p("Total {} = {}".format(i, sum(male_counts) + sum(female_counts) + sum(other_counts)))
+        r.p("")
 
     total_male = 0
     for i in ['Beavers', 'Cubs', 'Scouts']:
@@ -348,9 +357,14 @@ def census(r, group):
     for i in ['Beavers', 'Cubs', 'Scouts']:
         total_female += sum(census_[i]['F'].values())
 
-    r.p("Male = {}".format(total_male))
-    r.p("Female = {}".format(total_female))
-    r.p("Census total = {}".format(total_male + total_female))
+    total_other = 0
+    for i in ['Beavers', 'Cubs', 'Scouts']:
+        total_other += sum(census_[i]['O'].values())
+
+    r.p("Total Male YP = {}".format(total_male))
+    r.p("Total Female YP = {}".format(total_female))
+    r.p("Total Other YP = {}".format(total_other))
+    r.p("Census Total YP = {}".format(total_male + total_female + total_other))
 
 
 COMMON = [intro,
@@ -359,16 +373,17 @@ COMMON = [intro,
 # NOT_ADULT = [section_compass_check, ]
 NOT_ADULT = []
 
-elements = {'Maclean': COMMON + NOT_ADULT,
-            'Rowallan': COMMON + NOT_ADULT,
-            'Garrick': COMMON + NOT_ADULT,
-            'Somers': COMMON + NOT_ADULT,
-            'Erasmus': COMMON + NOT_ADULT,
-            'Swinfen': COMMON + NOT_ADULT,
-            'Boswell': COMMON + NOT_ADULT,
-            'Johnson': COMMON + NOT_ADULT,
-            'Paget': COMMON + NOT_ADULT,
-            'Adult': COMMON}
+elements = OrderedDict((
+    ('Garrick', COMMON + NOT_ADULT),
+    ('Paget', COMMON + NOT_ADULT),
+    ('Swinfen', COMMON + NOT_ADULT),
+    ('Maclean', COMMON + NOT_ADULT),
+    ('Rowallan', COMMON + NOT_ADULT),
+    ('Somers', COMMON + NOT_ADULT),
+    ('Erasmus', COMMON + NOT_ADULT),
+    ('Boswell', COMMON + NOT_ADULT),
+    ('Johnson', COMMON + NOT_ADULT),
+    ('Adult', COMMON)))
 
 
 def group_report(r, group, quarter, term):
@@ -376,43 +391,53 @@ def group_report(r, group, quarter, term):
 
     census(r, group)
 
-    r.sub_title("Section Totals (including Scubbers)")
-    r.t_start(["Section", "Total YP"])
+    all_yp_members_without_leaders = group.all_yp_members_without_leaders_dict()
+    all_yp_members_without_senior_duplicates = group.all_yp_members_without_senior_duplicates_dict()
+    all_yl_members = group.all_yl_members_dict()
 
-    count = 0
-    for section, members in group.all_yp_members_without_leaders_dict().items():
-        count += len(members)
-        r.t_row([section, len(members)])
+    r.sub_title("Section Totals")
+    r.t_start(["Section", "Total YP (including Scubbers)", "Total YP (excluding Scubbers)", "Young Leaders"])
 
+    total_yp_members_without_leaders = 0
+    total_yp_members_without_senior_duplicates = 0
+    total_yl_members = 0
+    for section in group.YP_SECTIONS:
+        yp_members_without_leaders = len(all_yp_members_without_leaders[section])
+        yp_members_without_senior_duplicates = len(all_yp_members_without_senior_duplicates[section])
+        yl_members = len(all_yl_members[section])
+        r.t_row([section, yp_members_without_leaders, yp_members_without_senior_duplicates, yl_members])
+        total_yp_members_without_leaders += yp_members_without_leaders
+        total_yp_members_without_senior_duplicates += yp_members_without_senior_duplicates
+        total_yl_members += yl_members
+
+    r.t_row(["Total", total_yp_members_without_leaders, total_yp_members_without_senior_duplicates, total_yl_members])
     r.t_end()
+    r.p("")
 
-    r.p("Total (including scubbers) = {}".format(count))
+    r.sub_title("Section Type Totals")
+    r.t_start(["Section Type", "Total YP (including Scubbers)", "Total YP (excluding Scubbers)", "Young Leaders"])
 
-    r.sub_title("Section Totals (excluding Scubbers)")
+    total_yp_members_without_leaders = 0
+    total_yp_members_without_senior_duplicates = 0
+    total_yl_members = 0
+    for section_type in group.SECTIONS_BY_TYPE.keys():
+        section_type_without_leaders = 0
+        section_type_without_senior_duplicates = 0
+        section_type_yl_members = 0
+        for section in group.SECTIONS_BY_TYPE[section_type]:
+            section_type_without_leaders += len(all_yp_members_without_leaders[section])
+            section_type_without_senior_duplicates += len(all_yp_members_without_senior_duplicates[section])
+            section_type_yl_members += len(all_yl_members[section])
 
-    r.t_start(["Section", "Total YP"])
+        r.t_row([section_type, section_type_without_leaders, section_type_without_senior_duplicates, section_type_yl_members])
 
-    count = 0
-    for section, members in group.all_yp_members_without_senior_duplicates_dict().items():
-        count += len(members)
-        r.t_row([section, len(members)])
+        total_yp_members_without_leaders += section_type_without_leaders
+        total_yp_members_without_senior_duplicates += section_type_without_senior_duplicates
+        total_yl_members += section_type_yl_members
 
+    r.t_row(["Total", total_yp_members_without_leaders, total_yp_members_without_senior_duplicates, total_yl_members])
     r.t_end()
-
-    r.p("Total (excluding scubbers) = {}".format(count))
-
-    r.sub_title("Young Leaders Per Section")
-
-    r.t_start(["Section", "Total YL"])
-
-    count = 0
-    for section, members in group.all_yl_members_dict().items():
-        count += len(members)
-        r.t_row([section, len(members)])
-
-    r.t_end()
-
-    r.p("Total Young Leaders in Sections (note this may contain duplicates) = {}".format(count))
+    r.p("")
 
     # Get a list of all YL in all of the YP sections
     yls = group.all_yl_members()
@@ -434,7 +459,7 @@ def group_report(r, group, quarter, term):
 
     r.t_end()
 
-    r.p("Total Young Leaders in Sections (duplicates removed) = {}".format(count - dup_count))
+    r.p("Total Young Leaders in Sections (duplicates removed) = {}".format(total_yl_members - dup_count))
 
     # process_compass(r, group)
 
@@ -489,10 +514,8 @@ def _main(osm_, auth_, sections, no_email, email, quarter, term, http):
 def serve(report):
     import http.server
 
+    # noinspection PyClassHasNoInit
     class Handler(http.server.BaseHTTPRequestHandler):
-
-        def __init__(self, *args_, **kwargs):
-            super().__init__(self, *args_, **kwargs)
 
         def do_GET(self):
             self.send_response(200)

@@ -1,4 +1,5 @@
 from datetime import datetime
+from collections import OrderedDict
 import logging
 import osm
 
@@ -7,6 +8,7 @@ log = logging.getLogger(__name__)
 # OSM_REF_FIELD = 'customisable_data.membershipno'
 # OSM_REF_FIELD = 'customisable_data.PersonalReference'
 OSM_REF_FIELD = 'member_id'
+
 
 class Member(osm.Member):
 
@@ -19,18 +21,17 @@ osm.MemberClass = Member
 
 
 class Group(object):
-
-    SECTIONIDS = {'Adult': '18305',
-                  'Paget': '9960',
-                  'Swinfen': '17326',
-                  'Maclean': '14324',
-                  'Rowallan': '12700',
-                  'Boswell': '10363',
-                  'Johnson': '5882',
-                  'Garrick': '20711',
-                  'Erasmus': '20707',
-                  'Somers': '20706',
-                  'Subs': '33593'}
+    SECTIONIDS = OrderedDict((('Paget', '9960'),
+                              ('Swinfen', '17326'),
+                              ('Garrick', '20711'),
+                              ('Maclean', '14324'),
+                              ('Rowallan', '12700'),
+                              ('Somers', '20706'),
+                              ('Boswell', '10363'),
+                              ('Johnson', '5882'),
+                              ('Erasmus', '20707'),
+                              ('Adult', '18305'),
+                              ('Subs', '33593')))
     # 'Waiting List': ""}
 
     ADULT_SECTION = 'Adult'
@@ -38,13 +39,13 @@ class Group(object):
 
     YP_SECTIONS = ['Paget',
                    'Swinfen',
+                   'Garrick',
                    'Maclean',
                    'Rowallan',
+                   'Somers',
                    'Boswell',
                    'Johnson',
-                   'Garrick',
-                   'Erasmus',
-                   'Somers']
+                   'Erasmus']
 
     SECTION_TYPE = {
         'Adult': 'adult',
@@ -59,6 +60,12 @@ class Group(object):
         'Erasmus': 'scouts',
         'Somers': 'cubs'
     }
+
+    # Create a reverse mapping of the Sections to their types.
+    SECTIONS_BY_TYPE = OrderedDict((
+        ('beavers', ['Paget', 'Swinfen', 'Garrick']),
+        ('cubs', ['Maclean', 'Rowallan', 'Somers']),
+        ('scouts', ['Boswell', 'Johnson', 'Erasmus'])))
 
     MIN_AGE = {
         'Swinfen': 5,
@@ -188,6 +195,17 @@ class Group(object):
                 ((member.age().days / 365 > 15.8) and
                  (member.age().days / 365 < 18)))
 
+    def is_scout_helper(self, member):
+        """
+                Try to work out if the member is a Scout helper in a junior section.
+
+                :param member:
+                :return: True or False
+                """
+        return ((member['patrol'].lower() in
+                 self.get_yp_patrol_exclude_list()) and
+                (member.age().days / 365 <= 15))
+
     def is_leader(self, member):
         """
         Try to work out if the member is a Leader or not.
@@ -195,10 +213,10 @@ class Group(object):
         :param member:
         :return: True or False
         """
-        return (member.age().days / 365 > 18)
+        return member.age().days / 365 > 18
 
     def is_yp(self, member):
-        return not (self.is_yl(member) or self.is_leader(member))
+        return not (self.is_yl(member) or self.is_leader(member) or self.is_scout_helper(member))
 
     def section_yp_members_without_leaders(self, section):
         return [member for member in
@@ -402,21 +420,24 @@ class Group(object):
                 if (m['floating.gender'].lower() == 'm' or
                     m['floating.gender'].lower() == 'male')]
 
+    def others_in_section(self, section):
+        return [m for m in self.all_yp_members_without_senior_duplicates_dict()[section]
+                if (not ((m['floating.gender'].lower() == 'm' or m['floating.gender'].lower() == 'male') or
+                    (m['floating.gender'].lower() == 'f' or m['floating.gender'].lower() == 'female')))]
+
     def census(self):
         """Return the information required for the annual census."""
 
-        r = {'Beavers': {'M':
-                         {5: 0, 6: 0, 7: 0, 8: 0},
-                         'F':
-                         {5: 0, 6: 0, 7: 0, 8: 0}},
-             'Cubs': {'M':
-                      {7: 0, 8: 0, 9: 0, 10: 0},
-                      'F':
-                      {7: 0, 8: 0, 9: 0, 10: 0}},
-             'Scouts': {'M':
-                        {10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0},
-                        'F':
-                        {10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0}}}
+        r = {'Beavers': {'M': {5: 0, 6: 0, 7: 0, 8: 0},
+                         'F': {5: 0, 6: 0, 7: 0, 8: 0},
+                         'O': {5: 0, 6: 0, 7: 0, 8: 0}
+                         },
+             'Cubs': {'M': {7: 0, 8: 0, 9: 0, 10: 0},
+                      'F': {7: 0, 8: 0, 9: 0, 10: 0},
+                      'O': {7: 0, 8: 0, 9: 0, 10: 0}},
+             'Scouts': {'M': {10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0},
+                        'F': {10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0},
+                        'O': {10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0}}}
 
         for i in range(5, 9):
             r['Beavers']['F'][i] = len(
@@ -430,6 +451,12 @@ class Group(object):
                  self.boys_in_section('Swinfen') +
                  self.boys_in_section('Paget') +
                  self.boys_in_section('Garrick')
+                 if int(m.age().days / 365) == i])
+            r['Beavers']['O'][i] = len(
+                [m for m in
+                 self.others_in_section('Swinfen') +
+                 self.others_in_section('Paget') +
+                 self.others_in_section('Garrick')
                  if int(m.age().days / 365) == i])
 
         for i in range(7, 11):
@@ -445,6 +472,12 @@ class Group(object):
                  self.boys_in_section('Rowallan') +
                  self.boys_in_section('Somers')
                  if int(m.age().days / 365) == i])
+            r['Cubs']['O'][i] = len(
+                [m for m in
+                 self.others_in_section('Maclean') +
+                 self.others_in_section('Rowallan') +
+                 self.others_in_section('Somers')
+                 if int(m.age().days / 365) == i])
 
         for i in range(10, 16):
             r['Scouts']['F'][i] = len(
@@ -459,5 +492,10 @@ class Group(object):
                  self.boys_in_section('Boswell') +
                  self.boys_in_section('Erasmus')
                  if int(m.age().days / 365) == i])
-
+            r['Scouts']['O'][i] = len(
+                [m for m in
+                 self.others_in_section('Johnson') +
+                 self.others_in_section('Boswell') +
+                 self.others_in_section('Erasmus')
+                 if int(m.age().days / 365) == i])
         return r
