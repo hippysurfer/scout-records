@@ -60,6 +60,30 @@ class Group(object):
         'Somers': 'cubs'
     }
 
+    MIN_AGE = {
+        'Swinfen': 5,
+        'Paget': 5,
+        'Garrick': 5,
+        'Maclean': 7,
+        'Rowallan': 7,
+        'Somers': 7,
+        'Johnson': 10,
+        'Boswell': 10,
+        'Erasmus': 10,
+    }
+
+    MAX_AGE = {
+        'Swinfen': 8,
+        'Paget': 8,
+        'Garrick': 8,
+        'Maclean': 10,
+        'Rowallan': 10,
+        'Somers': 10,
+        'Johnson': 15,
+        'Boswell': 15,
+        'Erasmus': 15
+    }
+
     def __init__(self, osm, auth, important_fields, term=None, on_date=None,
                  include_yl_as_yp=True):
         self._osm = osm
@@ -164,11 +188,22 @@ class Group(object):
                 ((member.age().days / 365 > 15.8) and
                  (member.age().days / 365 < 18)))
 
+    def is_leader(self, member):
+        """
+        Try to work out if the member is a Leader or not.
+
+        :param member:
+        :return: True or False
+        """
+        return (member.age().days / 365 > 18)
+
+    def is_yp(self, member):
+        return not (self.is_yl(member) or self.is_leader(member))
+
     def section_yp_members_without_leaders(self, section):
         return [member for member in
                 self.section_all_members(section)
-                if not member['patrol'].lower() in
-                self.get_yp_patrol_exclude_list()]
+                if self.is_yp(member)]
 
     def section_yl_members(self, section):
         return [member for member in
@@ -179,8 +214,7 @@ class Group(object):
         return [member for member in
                 self.section_all_members(
                     section)
-                if member['patrol'].lower() in
-                self.get_yp_patrol_exclude_list()]
+                if self.is_leader(member)]
 
     def all_leaders_in_yp_sections(self):
         # Make a list of all the leaders

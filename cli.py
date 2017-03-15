@@ -188,7 +188,7 @@ def census_leavers(osm, auth, term=None, csv=False,
               'Autumn 2017',
               ]]
 
-    pairs =[(terms[x],terms[x+1]) for x in range(len(terms)-1)]
+    pairs = [(terms[x], terms[x + 1]) for x in range(len(terms) - 1)]
 
     section_map = {'Garrick': 'Beavers',
                    'Paget': 'Beavers',
@@ -216,11 +216,12 @@ def census_leavers(osm, auth, term=None, csv=False,
 
         missing = [_ for _ in old_members if not new_members.count(_)]
 
-        for first,last in missing:
+        for first, last in missing:
             sections = old_term.find_sections_by_name(first, last)
             member = old_members_raw[old_members.index((first, last))]
             age = member.age(ref_date=old.enddate).days // 365
-            rows.append([old['name'],section_map[sections[0]],sections[0],first,last,age,member['date_of_birth'],member['floating.gender'].lower()])
+            rows.append([old['name'], section_map[sections[0]], sections[0], first, last, age, member['date_of_birth'],
+                         member['floating.gender'].lower()])
 
     headers = ["Last Term", "Section", "Section Name", "First", "Last", "Age", "DOB", "Gender"]
 
@@ -234,6 +235,7 @@ def census_leavers(osm, auth, term=None, csv=False,
             print(tabulate.tabulate(rows, headers=headers))
         else:
             print(tabulate.tabulate(rows, tablefmt="plain"))
+
 
 def contacts_list(osm, auth, section, term=None):
     group = Group(osm, auth, MAPPING.keys(), term)
@@ -254,22 +256,21 @@ def movers_list(osm, auth, section, age=None, term=None,
 
     movers = section_.movers
 
-
     if age:
-        threshold = (365*float(age))
+        threshold = (365 * float(age))
         now = datetime.datetime.now()
-        age_fn = lambda dob: (now - datetime.datetime.strptime(dob,'%Y-%m-%d')).days
+        age_fn = lambda dob: (now - datetime.datetime.strptime(dob, '%Y-%m-%d')).days
 
         movers = [mover for mover in section_.movers
                   if age_fn(mover['dob']) > threshold]
 
     now = datetime.datetime.now()
     for mover in movers:
-        real_dob = datetime.datetime.strptime(mover['dob'],'%Y-%m-%d')
+        real_dob = datetime.datetime.strptime(mover['dob'], '%Y-%m-%d')
         rel_age = relativedelta.relativedelta(now, real_dob)
         mover['real_age'] = "{}.{}".format(rel_age.years, rel_age.months)
 
-    rows = [[section_['sectionname']] +[member[header] for header in headers]
+    rows = [[section_['sectionname']] + [member[header] for header in headers]
             for member in movers]
 
     headers = ["Current Section"] + headers
@@ -284,6 +285,7 @@ def movers_list(osm, auth, section, age=None, term=None,
             print(tabulate.tabulate(rows, headers=headers))
         else:
             print(tabulate.tabulate(rows, tablefmt="plain"))
+
 
 def events_list(osm, auth, section, term=None):
     group = Group(osm, auth, MAPPING.keys(), term)
@@ -347,10 +349,11 @@ def users_list(osm, auth, section, csv=False, no_headers=False, term=None):
     for user in group._sections.sections[Group.SECTIONIDS[section]].users:
         print(user['firstname'])
 
+
 def members_badges(osm, auth, section, csv=False, no_headers=False, term=None):
     group = Group(osm, auth, MAPPING.keys(), term)
 
-    #members = group._sections.sections[Group.SECTIONIDS[section]].members
+    # members = group._sections.sections[Group.SECTIONIDS[section]].members
     members = group.section_yp_members_without_leaders(section)
     rows = []
     for member in members:
@@ -371,7 +374,7 @@ def members_badges(osm, auth, section, csv=False, no_headers=False, term=None):
             rows.append([member['date_of_birth'], member['last_name'], member['age'], section,
                          challenge_new, challenge_old, activity, staged, core])
 
-    headers = ["DOB", "Last Name","Age", "Section Name", "Challenge", "Challenge_old", "Staged", "Activity", "Core"]
+    headers = ["DOB", "Last Name", "Age", "Section Name", "Challenge", "Challenge_old", "Staged", "Activity", "Core"]
 
     if csv:
         w = csv_writer(sys.stdout)
@@ -389,7 +392,7 @@ def member_badges(osm, auth, firstname, lastname, csv=False, no_headers=False, t
     group = Group(osm, auth, MAPPING.keys(), term)
 
     members = group.find_by_name(firstname, lastname)
-    #member = members[-1]
+    # member = members[-1]
     rows = []
     for member in members:
         for section_type in ('beavers', 'cubs', 'scouts'):
@@ -399,7 +402,8 @@ def member_badges(osm, auth, firstname, lastname, csv=False, no_headers=False, t
                     for badge in [_ for _ in badges if _['awarded'] == '1']:
                         rows.append([member['date_of_birth'], member['last_name'],
                                      member['age'], section_type, member._section['sectionname'],
-                                     badge['badge'], datetime.date.fromtimestamp(int(badge['awarded_date'])).isoformat()])
+                                     badge['badge'],
+                                     datetime.date.fromtimestamp(int(badge['awarded_date'])).isoformat()])
             except:
                 import traceback
                 traceback.print_exc()
@@ -436,41 +440,42 @@ def group_payments(osm, auth, outfile):
                         'date_of_birth']
 
     # Define payment schedules that we are interested in.
-    PAYMENT_DATES = collections.OrderedDict([
+    payment_schedules_list = [
         ('2016 - Spring Term - Part 1', datetime.date(2016, 1, 4)),
         ('2016 - Spring Term - Part 2', datetime.date(2016, 2, 22)),
         ('2016 - Summer Term - Part 1', datetime.date(2016, 4, 11)),
         ('2016 - Summer Term - Part 2', datetime.date(2016, 6, 6)),
         ('2016 - Autumn Term - Part 1', datetime.date(2016, 9, 5)),
-        ('2016 - Autumn Term - Part 2', datetime.date(2016, 10, 31))])
+        ('2016 - Autumn Term - Part 2', datetime.date(2016, 10, 31)),
+        ('2017 - Spring Term - Part 1', datetime.date(2017, 1, 9)),
+        ('2017 - Spring Term - Part 2', datetime.date(2017, 2, 20))
+    ]
 
-    SCHEDULES = [
-        '2016 - Spring Term - Part 1',
-        '2016 - Spring Term - Part 2',
-        '2016 - Summer Term - Part 1',
-        '2016 - Summer Term - Part 2',
-        '2016 - Autumn Term - Part 1']
+    payment_dates = collections.OrderedDict(payment_schedules_list)
+
+    schedules = [_[0] for _ in payment_schedules_list]
+    first_date = min([_[1] for _ in payment_schedules_list])
+    last_date = max([_[1] for _ in payment_schedules_list])
 
     # Payment amounts. Assumes all schedules use the same quantity.
-    GENERAL_AMOUNT = 17.95
-    DISCOUNT_AMOUNT = 12.13
+    general_amount = 17.95
+    discount_amount = 12.13
 
     # Fetch all of the available data for each term on which a payment is due.
     group_by_date = {}
-    for name, date in PAYMENT_DATES.items():
+    for name, date in payment_dates.items():
         group_by_date[name] = Group(osm, auth, important_fields, on_date=date)
 
-    # Get a list of all members in all terms accross the whole group.
+    # Get a list of all members in all terms across the whole group.
     all_yp_members = []
     for group in group_by_date.values():
         all_yp_members.extend(group.all_yp_members_without_leaders())
 
-    all_yp_by_scout_id = {member['member_id']:member for member in all_yp_members}
+    all_yp_by_scout_id = {member['member_id']: member for member in all_yp_members}
 
     # Get the current group data for the current term.
     current = Group(osm, auth, important_fields)
 
-    
     res = []
     for scoutid, member in all_yp_by_scout_id.items():
         current_member = current.find_by_scoutid_without_senior_duplicates(str(scoutid))
@@ -483,9 +488,9 @@ def group_payments(osm, auth, outfile):
         joined = datetime.datetime.strptime(member['started'], "%Y-%m-%d").date()
         ended = datetime.datetime.strptime(member['end_date'], "%Y-%m-%d").date() if member['end_date'] else False
 
-        amount = DISCOUNT_AMOUNT if member['customisable_data.cf_subs_type_n_g_d_'] == 'D' else GENERAL_AMOUNT
+        amount = discount_amount if member['customisable_data.cf_subs_type_n_g_d_'] == 'D' else general_amount
 
-        for schedule, date_ in PAYMENT_DATES.items():
+        for schedule, date_ in payment_dates.items():
             d[schedule] = amount if ((joined < date_ and not ended) or
                                      (joined < date_ and ended > date_)) else 0
         res.append(d)
@@ -497,18 +502,18 @@ def group_payments(osm, auth, outfile):
 
     def fetch_section(section_name):
         section = group._sections.sections[Group.SECTIONIDS[section_name]]
-        payments = section.get_payments('2015-09-04', '2016-10-03')
+        payments = section.get_payments(first_date.strftime('%Y-%m-%d'),
+                                        last_date.strftime('%Y-%m-%d'))
         return pd.read_csv(StringIO(payments.content.decode())) if payments is not None else pd.DataFrame()
 
     all = pd.concat([fetch_section(name) for name in all_sections], ignore_index=True)
-
 
     all['Schedule'] = all['Schedule'].str.replace('^General Subscriptions.*$', 'General Subscriptions')
     all['Schedule'] = all['Schedule'].str.replace('^Discounted Subscriptions.*$', 'Discounted Subscriptions')
     subs = all[(all['Schedule'] == 'General Subscriptions') | (all['Schedule'] == 'Discounted Subscriptions')]
 
     pv = pd.pivot_table(subs, values='Net', index=['Last name', 'First name'], columns=['Schedule', 'Payment'])
-    for schedule in SCHEDULES:
+    for schedule in schedules:
         pv['General Subscriptions'][schedule].fillna(
             pv['Discounted Subscriptions'][schedule], inplace=True)
     del pv['Discounted Subscriptions']
@@ -517,17 +522,15 @@ def group_payments(osm, auth, outfile):
 
     combined = tbl.join(pv, lsuffix='_est', rsuffix='_act', how='outer')
 
-    for schedule in SCHEDULES:
+    for schedule in schedules:
         for suffix in ['_est', '_act']:
             combined[schedule + suffix].fillna(0, inplace=True)
 
-    for schedule in SCHEDULES:
+    for schedule in schedules:
         combined[schedule + '_var'] = combined.apply(lambda row: row[schedule + '_est'] - row[schedule + '_act'],
                                                      axis=1)
 
     combined.to_excel(outfile, sheet_name="Data", merge_cells=False)
-
-
 
 
 if __name__ == '__main__':
@@ -580,8 +583,8 @@ if __name__ == '__main__':
 
         elif args['leavers']:
             census_leavers(osm, auth,
-                        csv=args['--csv'],
-                        no_headers=args['--no_headers'])
+                           csv=args['--csv'],
+                           no_headers=args['--no_headers'])
 
 
         elif args['list']:
@@ -602,16 +605,16 @@ if __name__ == '__main__':
     elif args['members']:
         if args['badges']:
             members_badges(osm, auth, args['<section>'],
-                       csv=args['--csv'],
-                       no_headers=args['--no_headers'])
+                           csv=args['--csv'],
+                           no_headers=args['--no_headers'])
         else:
             log.error('unknown')
     elif args['member']:
         if args['badges']:
             member_badges(osm, auth, args['<firstname>'],
-                           args['<lastname>'],
-                           csv=args['--csv'],
-                           no_headers=args['--no_headers'])
+                          args['<lastname>'],
+                          csv=args['--csv'],
+                          no_headers=args['--no_headers'])
         else:
             log.error('unknown')
 
@@ -622,6 +625,6 @@ if __name__ == '__main__':
             log.error('unknown')
 
     elif args['payments']:
-            payments(osm, auth, args['<section>'], args['<start>'], args['<end>'])
+        payments(osm, auth, args['<section>'], args['<start>'], args['<end>'])
     else:
         log.error('unknown')

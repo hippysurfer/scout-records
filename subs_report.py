@@ -1,4 +1,3 @@
-
 # coding: utf-8
 """Online Scout Manager Interface - generate report from subs.
 
@@ -59,7 +58,6 @@ MONTH_MAP = {1: "10", 2: "11", 3: "12", 4: "01", 5: "02", 6: "03", 7: "04", 8: "
 
 
 def send(to, subject, report_path, fro=FROM):
-
     for dest in to:
         msg = MIMEMultipart()
         msg['Subject'] = subject
@@ -97,7 +95,6 @@ def get_status(d):
 
 
 def fetch_scheme(group, acc, section, scheme, term):
-
     def set_subs_type(d, group=group):
         try:
             return group.find_by_scoutid(
@@ -110,10 +107,17 @@ def fetch_scheme(group, acc, section, scheme, term):
 
     schedules = acc("ext/finances/onlinepayments/?action=getPaymentSchedule"
                     "&sectionid={}&schemeid={}&termid={}".format(
-                        section['id'], scheme['schemeid'], term))
+        section['id'], scheme['schemeid'], term))
     status = acc("ext/finances/onlinepayments/?action="
                  "getPaymentStatus&sectionid={}&schemeid={}&termid={}".format(
-                     section['id'], scheme['schemeid'], term))
+        section['id'], scheme['schemeid'], term))
+
+    # Fix up wrongly named payment schedule in the Group Subs
+    if (scheme['name'] == 'Discounted Subscriptions for 7th Lichfield Scout Group' and
+        section['name'] == 'Subs'):
+        for payment in schedules['payments']:
+            if payment['date'] == '2017-02-20':
+                payment['name'] = '2017 - Spring Term - Part 2'
 
     schedules = [_ for _ in schedules['payments'] if _['archived'] == '0']
 
@@ -160,15 +164,16 @@ def fetch_section(group, acc, section, term):
                   "Matching schemes were: {}".format(section['name'],
                                                      ",".join(schemes)))
 
+
     c = pd.concat([fetch_scheme(group, acc, section, scheme, term)
                    for scheme in schemes
                    if scheme['name'] != 'Camps and Events'],
                   ignore_index=True)
+
     return c
 
 
 def _main(osm, auth, outdir, email, term, do_upload):
-
     assert os.path.exists(outdir) and os.path.isdir(outdir)
 
     group = Group(osm, auth, update.MAPPING.keys(), term)
@@ -187,7 +192,8 @@ def _main(osm, auth, outdir, email, term, do_upload):
         {'name': 'Garrick', 'id': '20711'},
         {'name': 'Erasmus', 'id': '20707'},
         {'name': 'Somers', 'id': '20706'},
-        {'name': 'Boswell', 'id': '10363'}
+        {'name': 'Boswell', 'id': '10363'},
+        {'name': 'Subs', 'id': '33593'}
     ]
 
     subs_names = ['General Subscriptions', 'Discounted Subscriptions']
@@ -256,13 +262,13 @@ def _main(osm, auth, outdir, email, term, do_upload):
         # All subs with the correct subs_type
         for scheme in subs_names_and_types:
             al[(al['scheme'] == scheme[0]) &
-                (al['subs_type'] == scheme[1])].dropna(
+               (al['subs_type'] == scheme[1])].dropna(
                 axis=1, how='all').to_excel(writer, scheme[0] + "_OK")
 
         # All subs with the wrong subs type
         for scheme in subs_names_and_types:
             al[(al['scheme'] == scheme[0]) &
-                (al['subs_type'] != scheme[1])].dropna(
+               (al['subs_type'] != scheme[1])].dropna(
                 axis=1, how='all').to_excel(writer, scheme[0] + "_BAD")
 
         # Members not in the subs that their sub_type says they should be.
@@ -285,12 +291,12 @@ def _main(osm, auth, outdir, email, term, do_upload):
     if email:
         send([email, ], "OSM Subs Report", filename)
 
-
     if do_upload:
         from gc_accounts import SECTION_MAP, DRIVE_FOLDERS
         if filename is not None:
             upload(filename, DRIVE_FOLDERS['Group'],
                    filename=os.path.splitext(os.path.split(filename)[1])[0])
+
 
 if __name__ == '__main__':
 
