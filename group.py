@@ -1,4 +1,5 @@
 from datetime import datetime
+from dateutil import relativedelta
 from collections import OrderedDict
 import logging
 import osm
@@ -16,6 +17,12 @@ class Member(osm.Member):
         dob = datetime.strptime(
             self['date_of_birth'], '%Y-%m-%d')
         return ref_date - dob
+
+    def age_in_years_and_months(self):
+        now = datetime.now()
+        real_dob = datetime.strptime(self['date_of_birth'], '%Y-%m-%d')
+        rel_age = relativedelta.relativedelta(now, real_dob)
+        return "{}.{}".format(rel_age.years, rel_age.months)
 
 osm.MemberClass = Member
 
@@ -271,14 +278,15 @@ class Group(object):
             self.section_yp_members_without_leaders('Boswell') +\
             self.section_yp_members_without_leaders('Erasmus')
 
-    def find_ref_in_sections(self, reference):
+    def find_ref_in_sections(self, reference, exclude_sections=None):
         """Search for a reference in all of the sections.
 
         return a list of section names."""
 
         matching_sections = []
 
-        for section in self.SECTIONIDS.keys():
+        for section in [_ for _ in self.SECTIONIDS.keys() if
+                _ not in (exclude_sections if exclude_sections else [])]:
             if reference in self.all_section_references(
                     section):
                 matching_sections.append(section)

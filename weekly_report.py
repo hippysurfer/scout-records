@@ -461,6 +461,51 @@ def group_report(r, group, quarter, term):
 
     r.p("Total Young Leaders in Sections (duplicates removed) = {}".format(total_yl_members - dup_count))
 
+    r.sub_title("YP in Group Subs but not in any YP Section")
+
+    subs_members = group.section_all_members(group.SUBS_SECTION)
+
+    all_yp_members_without_senior_duplicates_ids = [member[OSM_REF_FIELD] for member in
+                                                    group.all_yp_members_without_senior_duplicates()]
+
+    for member in sorted(subs_members, key=lambda _: _['last_name']):
+        if member[OSM_REF_FIELD] not in all_yp_members_without_senior_duplicates_ids:
+            sections = group.find_ref_in_sections(member[OSM_REF_FIELD],
+                                                  exclude_sections=('Subs',))
+            member_in_yp_section = (
+                group.find_by_scoutid(str(member[OSM_REF_FIELD]), sections[0])[0]
+                if len(sections) > 0 else None)
+
+            r.p("{} {} ({}): {} {}".format(
+                member['first_name'],
+                member['last_name'],
+                member.age_in_years_and_months(),
+                ",".join(sections),
+                ("" if member_in_yp_section is None else
+                 ("(Young Leader)" if group.is_yl(member_in_yp_section) else (
+                     "(Scout helper)" if group.is_scout_helper(member_in_yp_section) else "")))
+            ))
+
+    r.sub_title("YP in a YP Section but not in Group Subs")
+
+    subs_members_ids = [member[OSM_REF_FIELD] for member in
+                        group.section_all_members(group.SUBS_SECTION)]
+    all_yp_members_without_senior_duplicates = group.all_yp_members_without_senior_duplicates()
+
+    for member in sorted(all_yp_members_without_senior_duplicates,
+                         key=lambda _: _['last_name']):
+        if member[OSM_REF_FIELD] not in subs_members_ids:
+            sections = group.find_ref_in_sections(member[OSM_REF_FIELD],
+                                                  exclude_sections=('Subs',))
+
+            r.p("{} {} ({}): {} {}".format(
+                member['first_name'],
+                member['last_name'],
+                member.age_in_years_and_months(),
+                ",".join(sections),
+                "(Young Leader)" if group.is_yl(member) else (
+                    "(Scout helper)" if group.is_scout_helper(member) else "")))
+
     # process_compass(r, group)
 
     # process_finance_spreadsheet(r, group, quarter)
