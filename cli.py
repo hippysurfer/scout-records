@@ -237,41 +237,51 @@ def census_leavers(osm, auth, term=None, csv=False,
             print(tabulate.tabulate(rows, tablefmt="plain"))
 
 
-def contacts_list(osm, auth, section, term=None):
+def contacts_list(osm, auth, sections, term=None):
     group = Group(osm, auth, MAPPING.keys(), term)
 
-    for member in group.section_all_members(section):
-        print("{} {}".format(member['first_name'], member['last_name']))
+    for section in sections:
+        for member in group.section_all_members(section):
+            print("{} {}".format(member['first_name'], member['last_name']))
 
 
-def movers_list(osm, auth, section, age=None, term=None,
+def movers_list(osm, auth, sections, age=None, term=None,
                 csv=False, no_headers=False):
     group = Group(osm, auth, MAPPING.keys(), term)
-    section_ = group._sections.sections[Group.SECTIONIDS[section]]
 
-    headers = ['firstname', 'lastname', 'real_age', 'dob',
-               "Date Parents Contacted", "Parents Preference",
-               "Date Leaders Contacted", "Agreed Section",
-               "Starting Date", "Leaving Date", "Notes", "Priority"]
+    rows = []
 
-    movers = section_.movers
+    for section in sections:
+        section_ = group._sections.sections[Group.SECTIONIDS[section]]
 
-    if age:
-        threshold = (365 * float(age))
+        headers = ['firstname', 'lastname', 'real_age', 'dob',
+                   "Date Parents Contacted", "Parents Preference",
+                   "Date Leaders Contacted", "Agreed Section",
+                   "Starting Date", "Leaving Date", "Notes", "Priority",
+                   '8', '10 1/2', '14 1/2']
+
+        movers = section_.movers
+
+        if age:
+            threshold = (365 * float(age))
+            now = datetime.datetime.now()
+            age_fn = lambda dob: (now - datetime.datetime.strptime(dob, '%Y-%m-%d')).days
+
+            movers = [mover for mover in section_.movers
+                      if age_fn(mover['dob']) > threshold]
+
         now = datetime.datetime.now()
-        age_fn = lambda dob: (now - datetime.datetime.strptime(dob, '%Y-%m-%d')).days
+        for mover in movers:
+            real_dob = datetime.datetime.strptime(mover['dob'], '%Y-%m-%d')
+            rel_age = relativedelta.relativedelta(now, real_dob)
+            mover['real_age'] = "{0:02d}.{0:02d}".format(rel_age.years, rel_age.months)
+            mover['8'] = (real_dob+relativedelta.relativedelta(years=8)).strftime("%b %y")
+            mover['10 1/2'] = (real_dob + relativedelta.relativedelta(years=10, months=6)).strftime("%b %y")
+            mover['14 1/2'] = (real_dob + relativedelta.relativedelta(years=14, months=6)).strftime("%b %y")
 
-        movers = [mover for mover in section_.movers
-                  if age_fn(mover['dob']) > threshold]
-
-    now = datetime.datetime.now()
-    for mover in movers:
-        real_dob = datetime.datetime.strptime(mover['dob'], '%Y-%m-%d')
-        rel_age = relativedelta.relativedelta(now, real_dob)
-        mover['real_age'] = "{}.{}".format(rel_age.years, rel_age.months)
-
-    rows = [[section_['sectionname']] + [member[header] for header in headers]
-            for member in movers]
+        rows += [[section_['sectionname']] +
+                 [member[header] for header in headers]
+                  for member in movers]
 
     headers = ["Current Section"] + headers
 
@@ -287,105 +297,111 @@ def movers_list(osm, auth, section, age=None, term=None,
             print(tabulate.tabulate(rows, tablefmt="plain"))
 
 
-def events_list(osm, auth, section, term=None):
+def events_list(osm, auth, sections, term=None):
     group = Group(osm, auth, MAPPING.keys(), term)
 
-    for event in group._sections.sections[Group.SECTIONIDS[section]].events:
-        print(event['name'])
+    for section in sections:
+        for event in group._sections.sections[Group.SECTIONIDS[section]].events:
+            print(event['name'])
 
 
-def events_info(osm, auth, section, event, term=None):
+def events_info(osm, auth, sections, event, term=None):
     group = Group(osm, auth, MAPPING.keys(), term)
 
-    ev = group._sections.sections[
-        Group.SECTIONIDS[section]].events.get_by_name(event)
-    print(",".join([ev[_] for _ in ['name', 'startdate', 'enddate', 'location']]))
+    for section in sections:
+        ev = group._sections.sections[
+            Group.SECTIONIDS[section]].events.get_by_name(event)
+        print(",".join([ev[_] for _ in ['name', 'startdate', 'enddate', 'location']]))
 
 
-def events_attendees(osm, auth, section, event,
+def events_attendees(osm, auth, sections, event,
                      term=None, csv=False, attending_only=False,
                      no_headers=False):
     group = Group(osm, auth, MAPPING.keys(), term)
-    section_ = group._sections.sections[Group.SECTIONIDS[section]]
-    ev = section_.events.get_by_name(event)
-    if not ev:
-        log.error("No such event: {}".format(event))
-        sys.exit(0)
-    attendees = ev.attendees
-    mapping = ev.fieldmap
-    if attending_only:
-        attendees = [attendee for attendee in attendees
-                     if attendee['attending'] == "Yes"]
 
-    extra_fields = {
-        'patrol': 'Six',
-        'age': 'Age',
-    }
+    for section in sections:
+        section_ = group._sections.sections[Group.SECTIONIDS[section]]
+        ev = section_.events.get_by_name(event)
+        if not ev:
+            log.error("No such event: {}".format(event))
+            sys.exit(0)
+        attendees = ev.attendees
+        mapping = ev.fieldmap
+        if attending_only:
+            attendees = [attendee for attendee in attendees
+                         if attendee['attending'] == "Yes"]
 
-    def fields(attendee):
-        out = [str(attendee[_[1]]) for _ in mapping] + \
-              [section_.members.get_by_event_attendee(attendee)[_] for _ in
-               extra_fields.keys()]
-        return out
+        extra_fields = {
+            'patrol': 'Six',
+            'age': 'Age',
+        }
 
-    output = [fields(attendee)
-              for attendee in attendees if section_.members.is_member(attendee['scoutid'])]
-    headers = [_[0] for _ in mapping] + list(extra_fields.values())
-    if csv:
-        w = csv_writer(sys.stdout)
-        if not no_headers:
-            w.writerow(list(headers))
-        w.writerows(output)
-    else:
-        if not no_headers:
-            print(tabulate.tabulate(output, headers=headers))
+        def fields(attendee):
+            out = [str(attendee[_[1]]) for _ in mapping] + \
+                  [section_.members.get_by_event_attendee(attendee)[_] for _ in
+                   extra_fields.keys()]
+            return out
+
+        output = [fields(attendee)
+                  for attendee in attendees if section_.members.is_member(attendee['scoutid'])]
+        headers = [_[0] for _ in mapping] + list(extra_fields.values())
+        if csv:
+            w = csv_writer(sys.stdout)
+            if not no_headers:
+                w.writerow(list(headers))
+            w.writerows(output)
         else:
-            print(tabulate.tabulate(output, tablefmt="plain"))
+            if not no_headers:
+                print(tabulate.tabulate(output, headers=headers))
+            else:
+                print(tabulate.tabulate(output, tablefmt="plain"))
 
 
-def users_list(osm, auth, section, csv=False, no_headers=False, term=None):
+def users_list(osm, auth, sections, csv=False, no_headers=False, term=None):
     group = Group(osm, auth, MAPPING.keys(), term)
 
-    for user in group._sections.sections[Group.SECTIONIDS[section]].users:
-        print(user['firstname'])
+    for section in sections:
+        for user in group._sections.sections[Group.SECTIONIDS[section]].users:
+            print(user['firstname'])
 
 
-def members_badges(osm, auth, section, csv=False, no_headers=False, term=None):
+def members_badges(osm, auth, sections, csv=False, no_headers=False, term=None):
     group = Group(osm, auth, MAPPING.keys(), term)
 
-    # members = group._sections.sections[Group.SECTIONIDS[section]].members
-    members = group.section_yp_members_without_leaders(section)
-    rows = []
-    for member in members:
-        badges = member.get_badges(section_type=group.SECTION_TYPE[section])
-        if badges:
-            # If no badges - probably a leader
-            challenge_new = len([badge for badge in badges
-                                 if badge['awarded'] == '1' and badge['badge_group'] == '1'
-                                 and not badge['badge'].endswith('(Pre 2015)')])
-            challenge_old = len([badge for badge in badges
-                                 if badge['awarded'] == '1' and badge['badge_group'] == '1'
-                                 and badge['badge'].endswith('(Pre 2015)')])
+    for section in sections:
+        # members = group._sections.sections[Group.SECTIONIDS[section]].members
+        members = group.section_yp_members_without_leaders(section)
+        rows = []
+        for member in members:
+            badges = member.get_badges(section_type=group.SECTION_TYPE[section])
+            if badges:
+                # If no badges - probably a leader
+                challenge_new = len([badge for badge in badges
+                                     if badge['awarded'] == '1' and badge['badge_group'] == '1'
+                                     and not badge['badge'].endswith('(Pre 2015)')])
+                challenge_old = len([badge for badge in badges
+                                     if badge['awarded'] == '1' and badge['badge_group'] == '1'
+                                     and badge['badge'].endswith('(Pre 2015)')])
 
-            activity = len([badge for badge in badges if badge['awarded'] == '1' and badge['badge_group'] == '2'])
-            staged = len([badge for badge in badges if badge['awarded'] == '1' and badge['badge_group'] == '3'])
-            core = len([badge for badge in badges if badge['awarded'] == '1' and badge['badge_group'] == '4'])
+                activity = len([badge for badge in badges if badge['awarded'] == '1' and badge['badge_group'] == '2'])
+                staged = len([badge for badge in badges if badge['awarded'] == '1' and badge['badge_group'] == '3'])
+                core = len([badge for badge in badges if badge['awarded'] == '1' and badge['badge_group'] == '4'])
 
-            rows.append([member['date_of_birth'], member['last_name'], member['age'], section,
-                         challenge_new, challenge_old, activity, staged, core])
+                rows.append([member['date_of_birth'], member['last_name'], member['age'], section,
+                             challenge_new, challenge_old, activity, staged, core])
 
-    headers = ["DOB", "Last Name", "Age", "Section Name", "Challenge", "Challenge_old", "Staged", "Activity", "Core"]
+        headers = ["DOB", "Last Name", "Age", "Section Name", "Challenge", "Challenge_old", "Staged", "Activity", "Core"]
 
-    if csv:
-        w = csv_writer(sys.stdout)
-        if not no_headers:
-            w.writerow(list(headers))
-        w.writerows(rows)
-    else:
-        if not no_headers:
-            print(tabulate.tabulate(rows, headers=headers))
+        if csv:
+            w = csv_writer(sys.stdout)
+            if not no_headers:
+                w.writerow(list(headers))
+            w.writerows(rows)
         else:
-            print(tabulate.tabulate(rows, tablefmt="plain"))
+            if not no_headers:
+                print(tabulate.tabulate(rows, headers=headers))
+            else:
+                print(tabulate.tabulate(rows, tablefmt="plain"))
 
 
 def member_badges(osm, auth, firstname, lastname, csv=False, no_headers=False, term=None):
@@ -423,13 +439,14 @@ def member_badges(osm, auth, firstname, lastname, csv=False, no_headers=False, t
             print(tabulate.tabulate(rows, tablefmt="plain"))
 
 
-def payments(osm, auth, section, start, end):
+def payments(osm, auth, sections, start, end):
     group = Group(osm, auth, MAPPING.keys(), None)
 
-    osm_section = group._sections.sections[Group.SECTIONIDS[section]]
-    payments = osm_section.get_payments(start, end)
+    for section in sections:
+        osm_section = group._sections.sections[Group.SECTIONIDS[section]]
+        payments = osm_section.get_payments(start, end)
 
-    print(payments.content.decode())
+        print(payments.content.decode())
 
 
 def group_payments(osm, auth, outfile):
@@ -540,9 +557,13 @@ if __name__ == '__main__':
 
     args = docopt(__doc__, version='OSM 2.0')
 
+    sections = None
     if args['<section>']:
-        assert args['<section>'] in list(Group.SECTIONIDS.keys()) + ['Group'], \
+        section = args['<section>']
+        assert section in list(Group.SECTIONIDS.keys()) + ['Group'] + list(Group.SECTIONS_BY_TYPE.keys()), \
             "section must be in {!r}.".format(list(Group.SECTIONIDS.keys()) + ['Group'])
+
+        sections = Group.SECTIONS_BY_TYPE[section] if section in Group.SECTIONS_BY_TYPE.keys() else [section,]
 
     term = args['--term'] if args['--term'] else None
 
@@ -551,32 +572,32 @@ if __name__ == '__main__':
 
     if args['events']:
         if args['list']:
-            events_list(osm, auth, args['<section>'])
+            events_list(osm, auth, sections)
         elif args['attendees']:
-            events_attendees(osm, auth, args['<section>'],
+            events_attendees(osm, auth, sections,
                              args['<event>'],
                              csv=args['--csv'],
                              attending_only=args['--attending'],
                              no_headers=args['--no_headers'])
         elif args['info']:
-            events_info(osm, auth, args['<section>'], args['<event>'])
+            events_info(osm, auth, sections, args['<event>'])
         else:
             log.error('unknown')
     elif args['contacts']:
         if args['list']:
-            contacts_list(osm, auth, args['<section>'])
+            contacts_list(osm, auth, sections)
         else:
             log.error('unknown')
     elif args['movers']:
         if args['list']:
-            movers_list(osm, auth, args['<section>'],
+            movers_list(osm, auth, sections,
                         age=args['--minage'],
                         csv=args['--csv'],
                         no_headers=args['--no_headers'])
         else:
             log.error('unknown')
     elif args['census']:
-        if (args['yl'] and args['list']):
+        if args['yl'] and args['list']:
             census_yl_list(osm, auth,
                            csv=args['--csv'],
                            no_headers=args['--no_headers'])
@@ -597,14 +618,14 @@ if __name__ == '__main__':
             log.error('unknown')
     elif args['users']:
         if args['list']:
-            users_list(osm, auth, args['<section>'],
+            users_list(osm, auth, sections,
                        csv=args['--csv'],
                        no_headers=args['--no_headers'])
         else:
             log.error('unknown')
     elif args['members']:
         if args['badges']:
-            members_badges(osm, auth, args['<section>'],
+            members_badges(osm, auth, sections,
                            csv=args['--csv'],
                            no_headers=args['--no_headers'])
         else:
@@ -625,6 +646,6 @@ if __name__ == '__main__':
             log.error('unknown')
 
     elif args['payments']:
-        payments(osm, auth, args['<section>'], args['<start>'], args['<end>'])
+        payments(osm, auth, sections, args['<start>'], args['<end>'])
     else:
         log.error('unknown')

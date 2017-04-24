@@ -26,6 +26,10 @@ import csv
 import datetime
 import re
 import pandas as pd
+from io import StringIO
+from lxml import etree
+from contextlib import contextmanager
+from functools import lru_cache
 
 from pyvirtualdisplay import Display
 from splinter import Browser
@@ -336,6 +340,20 @@ def check(entry, section):
                 k))
 
 
+@contextmanager
+def display():
+    d = Display(visible=1, size=(1000, 1024))
+
+    try:
+        d.start()
+
+        yield d
+    finally:
+
+        d.stop()
+        del d
+
+
 class Compass:
 
     def __init__(self, username='', password='', outdir=''):
@@ -345,6 +363,7 @@ class Compass:
 
         self._browser = None
         self._record = None
+
 
     def quit(self):
         if self._browser:
@@ -358,33 +377,194 @@ class Compass:
             "browser.download.dir": self._outdir,
             "browser.helperApps.neverAsk.saveToDisk": "application/octet-stream,application/msexcel,application/csv"}
 
-        self._browser = Browser('firefox', profile_preferences=prefs)
+        self._browser = Browser('chrome') #, profile_preferences=prefs)
 
         self._browser.visit('https://compass.scouts.org.uk/login/User/Login')
 
         self._browser.fill('EM', self._username)
         self._browser.fill('PW', self._password)
-        time.sleep(2)
-        self._browser.find_by_value('Submit').first.click()
+        time.sleep(1)
+        self._browser.find_by_text('Log in').first.click()
 
         # Look for the Role selection menu and select my Group Admin role.
         self._browser.is_element_present_by_name(
             'ctl00$UserTitleMenu$cboUCRoles',
             wait_time=30)
         self._browser.select('ctl00$UserTitleMenu$cboUCRoles', '1253644')
+        time.sleep(1)
+
+    def wait_then_click_xpath(self, xpath, wait_time=30, frame=None):
+        frame = self._browser if frame is None else frame
+        while True:
+            try:
+                if frame.is_element_present_by_xpath(xpath, wait_time=wait_time):
+                    frame.find_by_xpath(xpath).click()
+                    break
+                else:
+                    log.warning("Timeout expired waiting for {}".format(xpath))
+                    time.sleep(1)
+            except:
+                log.warning("Caught exception: ", exc_info=True)
+
+    def wait_then_click_text(self, text, wait_time=30, frame=None):
+        frame = self._browser if frame is None else frame
+        while True:
+            if frame.is_text_present(text, wait_time=wait_time):
+                frame.click_link_by_text(text)
+                break
+            else:
+                log.warning("Timeout expired waiting for {}".format(text))
+
+    def adult_training(self):
+        self.home()
+
+        # Navigate to training page a show all records.
+        self.wait_then_click_text('Training')
+        time.sleep(1)
+        self.wait_then_click_text('Adult Training')
+        time.sleep(1)
+        self.wait_then_click_xpath('//*[@id="bn_p1_search"]')
+
+    def home(self):
+        # Click the logo to take us to the top
+        self.wait_then_click_xpath('//*[@alt="Compass Logo"]')
+        time.sleep(1)
+
+    def search(self):
+        self.home()
+
+        # Click search button
+        self.wait_then_click_xpath('//*[@id="mn_SB"]')
+        time.sleep(1)
+
+        # Click "Find Member(s)"
+        self.wait_then_click_xpath('//*[@id="mn_MS"]')
+        time.sleep(1)
+
+        # Navigate to training page a show all records.
+        with self._browser.get_iframe('popup_iframe') as i:
+            self.wait_then_click_xpath('//*[@id="LBTN2"]', frame=i)
+            time.sleep(1)
+            self.wait_then_click_xpath('//*[@class="popup_footer_right_div"]/a', frame=i)
+            time.sleep(1)
+
+    def lookup_member(self, member_number):
+        self.home()
+
+        # Click search button
+        self.wait_then_click_xpath('//*[@id="mn_SB"]')
+        time.sleep(1)
+
+        xpath = '//*[@id="CNLookup2"]'
+        while True:
+            try:
+                if self._browser.is_element_present_by_xpath(xpath, wait_time=30):
+                    self._browser.find_by_xpath(xpath).fill(member_number)
+                    break
+                else:
+                    log.warning("Timeout expired waiting for {}".format(xpath))
+                    time.sleep(1)
+            except:
+                log.warning("Caught exception: ", exc_info=True)
+
+        self.wait_then_click_xpath('//*[@id="mn_QS"]')
+
+    def fetch_table(self, table_id):
+        parser = etree.HTMLParser()
+
+        def columns(row):
+            return ["".join(_.itertext()) for _ in
+                    etree.parse(StringIO(row.html), parser).findall('/*/td')]
+
+        def headers(row):
+            return ["".join(_.itertext()) for _ in
+                    etree.parse(StringIO(row.html), parser).findall('/*/td')]
+
+        headers_xpath = '//*[@id ="{}"]/thead/*'.format(table_id)
+        table_xpath = '//*[@id ="{}"]/tbody/tr[not(@style="display: none;")]'.format(table_id)
+
+        if self._browser.is_element_present_by_xpath(table_xpath, wait_time=5):
+
+            headings = [headers(row) for row
+                        in self._browser.find_by_xpath(headers_xpath)][0]
+
+            records = [columns(row) for row
+                       in self._browser.find_by_xpath(table_xpath)]
+
+            # Extend the length of each row to the same length as the columns
+            records = [row+([None] * (len(headings)-len(row))) for row in records]
+
+            # And add dummy columns if we do not have enough headings
+            headings = headings + ["dummy{}".format(_) for _ in range(0,len(records[0]) - len(headings))]
+
+            return pd.DataFrame.from_records(records, columns=headings)
+
+        log.warning("Failed to find table {}".format(table_id))
+        return None
+
+    def member_training_record(self, member_number, member_name):
+        self.lookup_member(member_number)
+
+        # Select Training record
+        self.wait_then_click_xpath('//*[@id="LBTN5"]')
+
+        personal_learning_plans = self.fetch_table('tbl_p5_TrainModules')
+        personal_learning_plans['member'] = member_number
+        personal_learning_plans['name'] = member_name
+
+        training_record = self.fetch_table('tbl_p5_AllTrainModules')
+        training_record['member'] = member_number
+        training_record['name'] = member_name
+
+        mandatory_learning = self.fetch_table('tbl_p5_TrainOGL')
+        mandatory_learning['member'] = member_number
+        mandatory_learning['name'] = member_name
+
+        return personal_learning_plans, personal_learning_plans, mandatory_learning
+
+    def member_permits(self, member_number, member_name):
+        self.lookup_member(member_number)
+
+        # Select Permits
+        self.wait_then_click_xpath('//*[@id="LBTN4"]')
+
+        permits = self.fetch_table('tbl_p4_permits')
+        if permits is not None:
+            permits['member'] = member_number
+            permits['name'] = member_name
+
+        return permits
+
+    @lru_cache()
+    def get_all_adult_trainers(self):
+
+        self.adult_training()
+
+        return self.fetch_table('tbl_p1_results')
+
+    @lru_cache()
+    def get_all_group_members(self):
+
+        self.search()
+
+        self._browser.is_element_present_by_xpath('//*[@id = "MemberSearch"]/tbody', wait_time=10)
+        time.sleep(1)
+
+        # Hack to ensure that all of the search results loaded.
+        for i in range(0, 5):
+            self._browser.execute_script(
+                'document.getElementById("ctl00_main_working_panel_scrollarea").scrollTop = 100000')
+            time.sleep(1)
+
+        return self.fetch_table('MemberSearch')
 
     def export(self, section):
         # Select the My Scouting link.
         self._browser.is_text_present('My Scouting', wait_time=30)
         self._browser.click_link_by_text('My Scouting')
 
-        def wait_then_click_xpath(xpath, wait_time=30):
-            self._browser.is_element_present_by_xpath(
-                xpath, wait_time=wait_time)
-            self._browser.find_by_xpath(xpath).click()
-
         # Click the "Group Sections" hotspot.
-        wait_then_click_xpath('//*[@id="TR_HIER7"]/h2')
+        self.wait_then_click_xpath('//*[@id="TR_HIER7"]/h2')
 
         # Clink the link that shows the number of members in the section.
         # This is the one bit that is section specific.
@@ -403,21 +583,21 @@ class Compass:
             'erasmus': 9,
             'johnson': 10
         }
-        wait_then_click_xpath(
+        self.wait_then_click_xpath(
             '//*[@id="TR_HIER7_TBL"]/tbody/tr[{}]/td[4]/a'.format(
                 section_map[section.lower()]
             ))
 
         # Click on the Export button.
-        wait_then_click_xpath('//*[@id="bnExport"]')
+        self.wait_then_click_xpath('//*[@id="bnExport"]')
 
         # Click to say that we want a CSV output.
-        wait_then_click_xpath(
+        self.wait_then_click_xpath(
             '//*[@id="tbl_hdv"]/div/table/tbody/tr[2]/td[2]/input')
         time.sleep(2)
 
         # Click to say that we want all fields.
-        wait_then_click_xpath('//*[@id="bnOK"]')
+        self.wait_then_click_xpath('//*[@id="bnOK"]')
 
         download_path = os.path.join(self._outdir, 'CompassExport.csv')
 
@@ -426,7 +606,7 @@ class Compass:
             os.remove(download_path)
 
         # Click the warning.
-        wait_then_click_xpath('//*[@id="bnAlertOK"]')
+        self.wait_then_click_xpath('//*[@id="bnAlertOK"]')
 
         # Browser will now download the csv file into outdir. It will be called
         # CompassExport.
@@ -515,22 +695,25 @@ class Compass:
 
 def _main(username, password, sections, outdir):
 
-    display = Display(visible=0, size=(1920, 1080))
-
-    try:
-        display.start()
+    with display():
 
         compass = Compass(username, password, outdir)
         compass.loggin()
 
         try:
-            for section in sections:
-                compass.export(section)
+            all = compass.get_all_group_members()
+
+            all[['No', 'Name']][0:2].values.tolist()
+
+            # print(compass.member_permits('00857285'))
+            # print(compass.member_training_record('00857285'))
+
+
+            time.sleep(1)
+            # for section in sections:
+            #    compass.export(section)
         finally:
             compass.quit()
-
-    finally:
-        display.stop()
 
 if __name__ == '__main__':
 
