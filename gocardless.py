@@ -48,6 +48,46 @@ log = logging.getLogger(__name__)
 MONTH_MAP = {1: "10", 2: "11", 3: "12", 4: "01", 5: "02", 6: "03", 7: "04", 8: "05", 9: "06", 10: "07", 11: "08",
              12: "09"}
 
+from decimal import Decimal, getcontext, ROUND_HALF_UP
+
+# GoCardless appear to apply rounding up.
+getcontext().rounding = ROUND_HALF_UP
+
+GOCARDLESS_FEE = Decimal('0.01')   # 1% per transaction
+GOCARDLESS_LIMIT = Decimal('2.00') # Capped as £2.00
+OSM_FEE = Decimal('0.0195')        # 1.95% per transaction
+OSM_LIMIT = Decimal('Infinity')    # No cap.
+
+THREE_PLACES = Decimal('0.001')  # For quantizing to 3 places.
+TWO_PLACES = Decimal('0.01')     # For quantizing to 2 places.
+
+
+def fee(gross_amount, percentage_fee, limit=Decimal('Infinity')):
+    """Calculate the fee charged for a transaction.
+
+    Return the lower of the calculated fee and *limit*.
+
+    We have to quantize twice to get the same result as GoCardless. First we quantize to
+    3 decimal places and then to 2 decimal places. This gets a different result to quantizing
+    to 2 decimal places directly.
+    """
+    return min((gross_amount * percentage_fee).quantize(THREE_PLACES).quantize(TWO_PLACES),
+               limit)
+
+
+def transaction_fee(gross_amount):
+    """Calculate the total fee charged by GoCardless and OSM on a single transaction.
+
+    Note: this must be applied at a single GoCardless transaction level. It does not work
+    if you apply it to the aggregated payment that you receive into your bank account
+    because the rounding must be applied at end transaction."""
+    return (fee(gross_amount, GOCARDLESS_FEE, GOCARDLESS_LIMIT) +
+            fee(gross_amount, OSM_FEE, OSM_LIMIT))
+
+
+def total_fee_at_bank(gross_amounts):
+    """Return the total fee for a set of transactions as paid by GoCardless to the bank."""
+    return sum([transaction_fee(_) for _ in gross_amounts])
 
 def fetch_account(token, frm, to):
     client = gp.Client(access_token=token, environment='live')
@@ -65,7 +105,7 @@ def fetch_account(token, frm, to):
                              customer.family_name,
                              payment.description,
                              payment.status,
-                             decimal.Decimal(payment.amount) / 100))
+                             Decimal(payment.amount) / 100))
     if len(data) > 0:
         frame = pd.DataFrame(data,
                              columns=["payout_date",
@@ -75,9 +115,7 @@ def fetch_account(token, frm, to):
                                       "payment_status",
                                       "payment_amount"])
         frame["payout_date"] = pd.to_datetime(frame["payout_date"])
-        frame["payment_fee"] = frame["payment_amount"] * decimal.Decimal(0.0295)
-        frame["payment_fee"] = frame["payment_fee"].apply(
-            lambda _: _.quantize(decimal.Decimal('0.01'), rounding=decimal.ROUND_HALF_UP))
+        frame["payment_fee"] = frame["payment_amount"].apply(transaction_fee)
         frame["payment_net"] = frame["payment_amount"] - frame["payment_fee"]
         frame = frame.sort_values(by="payout_date", ascending=True)
         return frame
