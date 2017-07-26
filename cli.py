@@ -7,6 +7,7 @@ Usage:
    cli [options] <apiid> <token> census leavers
    cli [options] <apiid> <token> <section> movers list
    cli [options] <apiid> <token> <section> contacts list
+   cli [options] <apiid> <token> <section> contacts details   
    cli [options] <apiid> <token> <section> events list
    cli [options] <apiid> <token> <section> events <event> attendees
    cli [options] <apiid> <token> <section> events <event> info
@@ -71,6 +72,9 @@ def census_list(osm, auth, term=None, csv=False, attending_only=False,
                      member['date_of_birth'],
                      member['contact_primary_member.address1'],
                      member['contact_primary_1.address1'],
+                     member['contact_primary_1.address2'],
+                     member['contact_primary_1.address3'],
+                     member['contact_primary_1.postcode'],
                      member['contact_primary_2.address1'],
                      member['floating.gender'].lower()])
 
@@ -109,7 +113,8 @@ def census_list(osm, auth, term=None, csv=False, attending_only=False,
                     member['first_name'], member['last_name'], age
                 ))
 
-    headers = ["Section", "Section Name", "First", "Last", "DOB", "Address1", "Address2", "Address3", "Gender"]
+    headers = ["Section", "Section Name", "First", "Last", "DOB", "Address1", "Address1.1", "Address1.2", "Address1.3",
+               "Address2", "Address3", "Gender"]
 
     if csv:
         w = csv_writer(sys.stdout)
@@ -243,6 +248,49 @@ def contacts_list(osm, auth, sections, term=None):
     for section in sections:
         for member in group.section_all_members(section):
             print("{} {}".format(member['first_name'], member['last_name']))
+
+
+def contacts_detail(osm, auth, sections, csv=False, term=None, no_headers=False):
+    group = Group(osm, auth, MAPPING.keys(), term)
+    section_map = {'Garrick': 'Beavers',
+                   'Paget': 'Beavers',
+                   'Swinfen': 'Beavers',
+                   'Maclean': 'Cubs',
+                   'Somers': 'Cubs',
+                   'Rowallan': 'Cubs',
+                   'Erasmus': 'Scouts',
+                   'Boswell': 'Scouts',
+                   'Johnson': 'Scouts'}
+    rows = []
+
+    def add_row(section, member):
+        rows.append([section_map[section], section, member['first_name'], member['last_name'],
+                     member['date_of_birth'],
+                     member['contact_primary_1.email1'],
+                     member['contact_primary_1.address1'],
+                     member['contact_primary_1.address2'],
+                     member['contact_primary_1.address3'],
+                     member['contact_primary_1.postcode'],
+                     member['contact_primary_2.address1'],
+                     member['floating.gender'].lower()])
+
+    for section in sections:
+        for member in group.section_all_members(section):
+            add_row(section, member)
+
+    headers = ["Section", "Section Name", "First", "Last", "DOB", "Email1", "Address1", "Address1.1", "Address1.2", "Address1.3",
+               "Address2", "Address3", "Gender"]
+
+    if csv:
+        w = csv_writer(sys.stdout)
+        if not no_headers:
+            w.writerow(list(headers))
+        w.writerows(rows)
+    else:
+        if not no_headers:
+            print(tabulate.tabulate(rows, headers=headers))
+        else:
+            print(tabulate.tabulate(rows, tablefmt="plain"))
 
 
 def movers_list(osm, auth, sections, age=None, term=None,
@@ -586,6 +634,9 @@ if __name__ == '__main__':
     elif args['contacts']:
         if args['list']:
             contacts_list(osm, auth, sections)
+        elif args['details']:
+            contacts_detail(osm, auth, sections, csv=args['--csv'],
+                          no_headers=args['--no_headers'])
         else:
             log.error('unknown')
     elif args['movers']:

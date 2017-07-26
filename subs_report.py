@@ -101,12 +101,20 @@ def get_status(d):
 def fetch_scheme(group, acc, section, scheme, term):
     def set_subs_type(d, group=group):
         try:
-            return group.find_by_scoutid(
-                d['scoutid'])[0]['customisable_data.cf_subs_type_n_g_d_']
+            members = group.find_by_scoutid(d['scoutid'])
+            #if len(members) == 0:
+            #    print("Can't find {} {} in OSM")
+            return members[0]['customisable_data.cf_subs_type_n_g_d_']
         except:
-            print("failed to find sub type for: {} {}".format(
-                d['scoutid'],
-                traceback.format_exc()))
+            if len(members) > 0:
+                print("failed to find sub type for: {} {} {}".format(
+                    d['scoutid'],
+                    repr(member),
+                    traceback.format_exc()))
+            else:
+                print("Failed to find scoutid: {} {}".format(
+                    d,
+                    traceback.format_exc()))
             return "Unknown"
 
     schedules = acc("ext/finances/onlinepayments/?action=getPaymentSchedule"
