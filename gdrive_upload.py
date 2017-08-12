@@ -34,7 +34,7 @@ creds = store.get()
 if not creds or creds.invalid:
     flow = client.flow_from_clientsecrets('client_secret.json', SCOPES)
     creds = tools.run_flow(flow, store, flags) \
-        if flags else tools.run(flow, store)
+        if flags else tools.run_flow(flow, store)
 DRIVE = build('drive', 'v3', http=creds.authorize(Http()))
 
 
@@ -46,7 +46,7 @@ def upload(path, folder=None, filename=None, mimetype='application/vnd.google-ap
     if folder:
         metadata.update({'parents': [folder,]})
 
-    res = DRIVE.files().create(body=metadata, media_body=path).execute()
+    res = DRIVE.files().create(body=metadata, media_body=path, supportsTeamDrives=True).execute()
     if res:
         log.debug('Uploaded "%s" (%s)' % (filename, res['mimeType']))
     else:
