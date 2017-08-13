@@ -479,7 +479,7 @@ def create_groups(names):
         'spamModerationLevel': 'MODERATE',
         'whoCanViewGroup': 'ALL_MANAGERS_CAN_VIEW',
         'showInGroupDirectory': 'true',
-        'maxMessageBytes': '25',
+        'maxMessageBytes': '25000000',
         'customFooterText': (
             'You are receiving this message because you (or your child) is a member '
             'of the 7th Lichfield Scout Group. If you do not want to receive these '

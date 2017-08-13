@@ -15,6 +15,7 @@ Options:
   --version      Show version.
 """
 
+import os
 import csv
 import subprocess
 import logging
@@ -26,8 +27,8 @@ from weekly_report import Reporter
 
 log = logging.getLogger(__name__)
 
-GAMX = '/home/rjt/bin/gamx/gam'
-GAM = '/home/rjt/bin/gam/gam'
+GAMX = os.environ.get('GAMX_HOME', '/home/rjt/bin/gamx/gam')
+GAM = os.environ.get('GAM_HOME', '/home/rjt/bin/gam/gam')
 
 NOW = datetime.datetime.now(datetime.timezone.utc)
 
