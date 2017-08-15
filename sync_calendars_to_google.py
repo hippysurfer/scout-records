@@ -1,12 +1,111 @@
 import sys
 import yaml
 import csv
+import subprocess
+import datetime
+import dateutil.tz
+import logging
 
 import requests
 from icalendar import Calendar, Event
 
+from sync_contacts_to_google import to_csv_from_dict
+
+log = logging.getLogger(__name__)
+
+GAM = '/home/rjt/bin/gamx/gam'
+
+# CALENDAR_ID = "7thlichfield.org.uk_gehutke2qdqmkh14cqj96cjsro@group.calendar.google.com"
 
 in_cals = {}
+
+
+def fetch_existing_events(calendar_id):
+    try:
+        out = subprocess.run(args=[GAM, 'calendar', calendar_id,
+                                   'print', 'events'], stdout=subprocess.PIPE,
+                             check=True,
+                             universal_newlines=True)
+        events = list(csv.DictReader(out.stdout.splitlines()))
+    except subprocess.CalledProcessError:
+        log.warning('Error in fetch_existing_events. Probably means no available events',
+                    exc_info=True)
+        events = []
+    return events
+
+
+def add_calendar_events(calendar_id, events):
+    if len(events) > 0:
+        csv_text = to_csv_from_dict(events)
+        keys = [(k, f'~{k}') for k in events[0].keys()]
+        fields = [_ for sub_list in keys for _ in sub_list]
+        p = subprocess.Popen(stdin=subprocess.PIPE,
+                             args=[GAM, 'csv', '-', 'gam', 'calendar', calendar_id,
+                                   'add', 'event'] + fields,
+                             universal_newlines=True)
+        p.communicate(input=csv_text)
+        p.wait()
+
+
+def update_calendar_events(calendar_id, events):
+    if len(events) > 0:
+        csv_text = to_csv_from_dict(events)
+        keys = [(k, f'~{k}') for k in events[0].keys() if k != 'calendarId']
+        fields = [_ for sub_list in keys for _ in sub_list]
+        del fields[fields.index('id')]
+        p = subprocess.Popen(stdin=subprocess.PIPE,
+                             args=[GAM, 'csv', '-', 'gam', 'calendar', calendar_id,
+                                   'update', 'event', 'events'] + fields,
+                             universal_newlines=True)
+        p.communicate(input=csv_text)
+        p.wait()
+
+
+def delete_calendar_events(calendar_id, events):
+    if len(events) > 0:
+        csv_text = to_csv_from_dict(events)
+        p = subprocess.Popen(stdin=subprocess.PIPE,
+                             args=[GAM, 'csv', '-', 'gam', 'calendar', calendar_id,
+                                   'delete', 'event', 'events', '~id', 'doit'],
+                             universal_newlines=True)
+        p.communicate(input=csv_text)
+        p.wait()
+
+
+def convert_osm_uid_to_valid_google_id(osm_uid):
+    name = osm_uid.lower()
+    name = name.replace('-', '')
+    name = name.replace('/', '')
+    name = name.replace(' ', '')
+    return name
+
+
+def sync_google_calendar(calendar_id, current_events):
+    existing_events = fetch_existing_events(calendar_id)
+
+    current_event_ids = set([event['id'] for event in current_events])
+    existing_event_ids = set([event['id'] for event in existing_events])
+
+    update_events_ids = current_event_ids & existing_event_ids
+    add_event_ids = current_event_ids - existing_event_ids
+    delete_event_ids = existing_event_ids - current_event_ids
+
+    update_events = [_ for _ in current_events if _['id'] in update_events_ids]
+    add_events = [_ for _ in current_events if _['id'] in add_event_ids]
+    delete_events = [_ for _ in existing_events if _['id'] in delete_event_ids]
+
+    # Update the update events.
+    for event in update_events:
+        current_event = [_ for _ in current_events if _['id'] == event['id']][0]
+        event['start'] = current_event['start']
+        event['end'] = current_event['end']
+        event['summary'] = current_event['summary']
+        event['description'] = current_event['description']
+        event['location'] = current_event['location']
+
+    update_calendar_events(calendar_id, update_events)
+    add_calendar_events(calendar_id, add_events)
+    delete_calendar_events(calendar_id, delete_events)
 
 
 def read_config(filename):
@@ -29,37 +128,50 @@ def read_calendar(filename):
     return cal
 
 
-def write_calendar(options, sources, filename):
+def write_calendar(options, sources, google_calendar):
     """Create and write ics file"""
     cal = Calendar()
+    google_events = []
     timezones_cache = []
     for key, value in options.items():
         cal.add(key, value)
-    with open(f'{filename}.csv', 'w', newline='') as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(['id', 'start', 'end', 'summary', 'description', 'location'])
 
-        for source_id, category in sources.items():
-            for timezone in in_cals[source_id].walk('VTIMEZONE'):
-                if timezone['tzid'] not in timezones_cache:
-                    timezones_cache.append(timezone['tzid'])
-                    cal.add_component(timezone)
-            for event in in_cals[source_id].walk('VEVENT'):
-                event_copy = Event(event)
-                event_copy['SUMMARY'] = f'{category}: ' + event['SUMMARY']
-                event_copy.add('categories', category)
-                cal.add_component(event_copy)
-                # dt_utc = event_copy['DTSTART'].dt.astimezone(pytz.utc)
-                writer.writerow([
-                    event_copy['UID'],
-                    event_copy['DTSTART'].dt.isoformat(),
-                    event_copy['DTEND'].dt.isoformat() if event_copy.get('DTEND') else '',
-                    event_copy['SUMMARY'],
-                    event_copy.get('DESCRIPTION', ''),
-                    event_copy.get('LOCATION', '')
-                ])
-    with open(filename, 'w') as f:
-        f.write(cal.to_ical().decode())
+    for source_id, category in sources.items():
+        for timezone in in_cals[source_id].walk('VTIMEZONE'):
+            if timezone['tzid'] not in timezones_cache:
+                timezones_cache.append(timezone['tzid'])
+                cal.add_component(timezone)
+        for event in in_cals[source_id].walk('VEVENT'):
+            event_copy = Event(event)
+            event_copy['SUMMARY'] = f'{category}: ' + event['SUMMARY']
+            event_copy.add('categories', category)
+            cal.add_component(event_copy)
+            # dt_utc = event_copy['DTSTART'].dt.astimezone(pytz.utc)
+
+            start = event_copy['DTSTART'].dt
+            start = (start if isinstance(start, datetime.datetime)
+                     else datetime.datetime.combine(
+                start, datetime.time(
+                    hour=0, minute=0, second=0, tzinfo=dateutil.tz.tzutc())))
+
+            end = event_copy['DTEND'].dt if event_copy.get('DTEND') else start
+
+            end = (end if isinstance(end, datetime.datetime)
+                   else datetime.datetime.combine(
+                end, datetime.time(
+                    hour=0, minute=0, second=0, tzinfo=dateutil.tz.tzutc())))
+
+            google_event = {
+                'id': convert_osm_uid_to_valid_google_id(
+                    str(event_copy['UID'])),
+                'start': start,
+                'end': end,
+                'summary': str(event_copy['SUMMARY']),
+                'description': str(event_copy.get('DESCRIPTION', '')),
+                'location': str(event_copy.get('LOCATION', ''))}
+            google_events.append(google_event)
+
+    sync_google_calendar(google_calendar, google_events)
 
 
 def main():
@@ -100,11 +212,15 @@ def main():
     # Create and write output calendars
     for sink in config['sinks']:
         try:
-            write_calendar(sink['options'], sink['sources'], sink['filename'])
+            write_calendar(sink['options'], sink['sources'], sink['google_calendar'])
         except IOError:
             print('Unable to write ' + sink['filename'])
         except ValueError:
             print('Unable to create calendar ' + sink['filename'])
 
 if __name__ == '__main__':
+    level = logging.INFO
+
+    logging.basicConfig(level=level)
+    
     main()
