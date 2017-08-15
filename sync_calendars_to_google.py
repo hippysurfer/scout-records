@@ -4,6 +4,7 @@ import csv
 import subprocess
 import datetime
 import dateutil.tz
+from dateutil.parser import parse
 import logging
 
 import requests
@@ -95,15 +96,41 @@ def sync_google_calendar(calendar_id, current_events):
     delete_events = [_ for _ in existing_events if _['id'] in delete_event_ids]
 
     # Update the update events.
+    changed_events = []
     for event in update_events:
-        current_event = [_ for _ in current_events if _['id'] == event['id']][0]
-        event['start'] = current_event['start']
-        event['end'] = current_event['end']
-        event['summary'] = current_event['summary']
-        event['description'] = current_event['description']
-        event['location'] = current_event['location']
+        current_event = [_ for _ in existing_events if _['id'] == event['id']][0]
+        # event['start'] = parse(event['start'])
+        # event['end'] = parse(event['end'])
+        # log.warning((event['start'] == current_event['start.dateTime']))
+        # log.warning(f"changed: '{event['start']}' != '{current_event['start.dateTime']}'")  
+        description = event['description'].replace('\n','')
+        res = [event['start'] == parse(current_event['start.dateTime']),
+                    event['end'] == parse(current_event['end.dateTime']),
+                    event['summary'] == current_event['summary'],
+                    description == current_event['description'],
+                    event['location'] == current_event['location']]
+        if not all(res):
+            log.warning(f"changed: '{event['start']}' != '{current_event['start.dateTime']}'")  
+            log.warning(f"changed: '{event['end']}' != '{current_event['end.dateTime']}'")  
+            log.warning(f"changed: '{event['summary']}' != '{current_event['summary']}'")  
+            log.warning(f"changed: '{description}' != '{current_event['description']}'")  
+            log.warning(f"changed: '{event['location']}' != '{current_event['location']}'")  
+            # event['start'] = current_event['start.dateTime']
+            # event['end'] = current_event['end.dateTime']
+            # event['summary'] = current_event['summary']
+            # event['description'] = current_event['description']
+            # event['location'] = current_event['location']
+            changed_events.append(event)
+            log.warning(f"{res}")
+            # for char in range(len(current_event['start.dateTime'])):
+            #     if event['start'][char] == current_event['start.dateTime'][char]:
+            #         log.warning(f"{event['start'][char]} != {current_event['start.dateTime'][char]}")
+            # log.warning(type(event['start']))
+            # log.warning(type(current_event['start.dateTime']))
+        # else:
+        #     log.warning(f"unchanged: {event['summary']} == {current_event['summary']}")  
 
-    update_calendar_events(calendar_id, update_events)
+    update_calendar_events(calendar_id, changed_events)
     add_calendar_events(calendar_id, add_events)
     delete_calendar_events(calendar_id, delete_events)
 
