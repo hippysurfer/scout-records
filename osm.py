@@ -479,35 +479,40 @@ class Event(OSMObject):
         self._attendees = None
         self._fieldmap = None
 
-        self.start_date = datetime.datetime.strptime(
-            self._record['startdate'], '%d/%m/%Y')
+        try:
+            self.start_date = datetime.datetime.strptime(
+                self._record['startdate'], '%d/%m/%Y')
 
-        if self._record['enddate'] != '//':
-            self.end_date = datetime.datetime.strptime(
-                    self._record['enddate'], '%d/%m/%Y')
-        else:
-            self.end_date = self.start_date
+            if self._record['enddate'] not in ('//', '00/00/0000'):
+                self.end_date = datetime.datetime.strptime(
+                        self._record['enddate'], '%d/%m/%Y')
+            else:
+                self.end_date = self.start_date
 
 
-        if self._record['starttime']:
-            h, m, s = (int(i) for i in self._record['starttime'].split(':'))
-            self.start_time = datetime.datetime.combine(
-                self.start_date,
-                datetime.time(h, m, s))
-            self.start_time = dateutil.parser.parse(
-                pyTZ.localize(self.start_time).strftime(FMT))
-        else:
-            self.start_time = self.start_date
+            if self._record['starttime']:
+                h, m, s = (int(i) for i in self._record['starttime'].split(':'))
+                self.start_time = datetime.datetime.combine(
+                    self.start_date,
+                    datetime.time(h, m, s))
+                self.start_time = dateutil.parser.parse(
+                    pyTZ.localize(self.start_time).strftime(FMT))
+            else:
+                self.start_time = self.start_date
 
-        if self._record['endtime']:
-            h, m, s = (int(i) for i in self._record['endtime'].split(':'))
-            self.end_time = datetime.datetime.combine(
-                self.end_date,
-                datetime.time(h, m, s))
-            self.end_time = dateutil.parser.parse(
-                pyTZ.localize(self.end_time).strftime(FMT))
-        else:
-            self.end_time = self.end_date
+            if self._record['endtime']:
+                h, m, s = (int(i) for i in self._record['endtime'].split(':'))
+                self.end_time = datetime.datetime.combine(
+                    self.end_date,
+                    datetime.time(h, m, s))
+                self.end_time = dateutil.parser.parse(
+                    pyTZ.localize(self.end_time).strftime(FMT))
+            else:
+                self.end_time = self.end_date
+
+        except:
+            log.warning(f"Failed to setup end and start date for: {self._record}", exc_info=True)
+            raise
 
 
     @property

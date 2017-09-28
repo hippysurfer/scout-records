@@ -112,7 +112,7 @@ def fetch_scheme(group, acc, section, scheme, term):
                     repr(member),
                     traceback.format_exc()))
             else:
-                print("Failed to find scoutid: {} {}".format(
+                print("Failed to find scoutid: {} {} (member has probably left the section)".format(
                     d,
                     traceback.format_exc()))
             return "Unknown"

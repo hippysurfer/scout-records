@@ -14,8 +14,12 @@ OSM_REF_FIELD = 'member_id'
 class Member(osm.Member):
 
     def age(self, ref_date=datetime.now()):
-        dob = datetime.strptime(
-            self['date_of_birth'], '%Y-%m-%d')
+        try:
+            dob = datetime.strptime(
+                self['date_of_birth'], '%Y-%m-%d')
+        except ValueError:
+            log.error(f"Invalid date_of_birth {self['date_of_birth']} in record {self}")
+            raise
         return ref_date - dob
 
     def age_in_years_and_months(self):
