@@ -102,8 +102,8 @@ def fetch_scheme(group, acc, section, scheme, term):
     def set_subs_type(d, group=group):
         try:
             members = group.find_by_scoutid(d['scoutid'])
-            #if len(members) == 0:
-            #    print("Can't find {} {} in OSM")
+            if len(members) == 0:
+                print(f"Can't find {d['scoutid']} {d} in OSM")
             return members[0]['customisable_data.cf_subs_type_n_g_d_']
         except:
             if len(members) > 0:
