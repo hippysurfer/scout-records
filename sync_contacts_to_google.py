@@ -98,6 +98,7 @@ def sync_contacts(osm, auth, sections, google_accounts,
 
     def add_member_contacts(section, section_type, member):
         f1 = functools.partial(get, member=member, section='contact_primary_member')
+        custom_field = functools.partial(get, member=member, section='customisable_data')
 
         first = string.capwords(member['first_name'].strip())
         last_ = string.capwords(member['last_name'].strip())
@@ -109,9 +110,17 @@ def sync_contacts(osm, auth, sections, google_accounts,
         parent_groups = [string.capwords(_) for _ in [f'{section} Parents', f'{section_type} Parents',
                                                       f'All Parents', 'All']]
         yl_groups = [string.capwords(_) for _ in
-                         [f'{section} Young Leaders', f'{section_type} Young Leaders', f'All Young Leaders', 'All']]
-        leader_groups = [string.capwords(_) for _ in [f'{section} Leaders', f'{section_type} Leaders',
-                                                      'All Leaders', 'All']]
+                     [f'{section} Young Leaders', f'{section_type} Young Leaders',
+                      f'All Young Leaders', 'All Adults and Young Leaders', 'All']]
+
+        leader_groups = [string.capwords(_) for _ in
+                         [f'{section} Leaders', f'{section_type} Leaders',
+                          'All Leaders', 'All Adults and Young Leaders',
+                          'All']]
+
+        all_adults_and_young_leaders_groups = ['All Adults And Young Leaders', 'All']
+
+        exec_groups = ['Exec Members', 'All']
 
         def is_valid_email(func, tag):
             email_ = func(tag).strip()
@@ -155,9 +164,19 @@ def sync_contacts(osm, auth, sections, google_accounts,
             contacts[key]['sections'].append(section)
             if not group.is_leader(member):
                 contacts[key]['yp'].append(yp_name)
-            elif not section.lower() == 'adult':
-                # Do not put people in the Leader group just because they are in the Adult section.
-                contacts[key]['groups'].extend(leader_groups)
+
+            if section.lower() == 'adult':
+                # Everyone in the adult group is either a leader, a non-leader adult or a YL.
+                contacts[key]['groups'].extend(all_adults_and_young_leaders_groups)
+
+                if custom_field('cf_exec').lower() in ['y', 'yes']:
+                    contacts[key]['groups'].extend(exec_groups)
+            else:
+                # If we are not in the adult group, we must be in a normal section group
+                # so, if they are an adult they must be a leader.
+                if group.is_leader(member):
+                    contacts[key]['groups'].extend(leader_groups)
+
             if group.is_yl(member):
                 contacts[key]['groups'].extend(yl_groups)
             if len(address):
