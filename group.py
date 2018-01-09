@@ -444,10 +444,40 @@ class Group(object):
                          'F': {5: 0, 6: 0, 7: 0, 8: 0},
                          'O': {5: 0, 6: 0, 7: 0, 8: 0}
                          },
+             'Swinfen': {'M': {5: 0, 6: 0, 7: 0, 8: 0},
+                         'F': {5: 0, 6: 0, 7: 0, 8: 0},
+                         'O': {5: 0, 6: 0, 7: 0, 8: 0}
+                         },
+             'Paget': {'M': {5: 0, 6: 0, 7: 0, 8: 0},
+                         'F': {5: 0, 6: 0, 7: 0, 8: 0},
+                         'O': {5: 0, 6: 0, 7: 0, 8: 0}
+                         },
+             'Garrick': {'M': {5: 0, 6: 0, 7: 0, 8: 0},
+                         'F': {5: 0, 6: 0, 7: 0, 8: 0},
+                         'O': {5: 0, 6: 0, 7: 0, 8: 0}
+                         },
              'Cubs': {'M': {7: 0, 8: 0, 9: 0, 10: 0},
                       'F': {7: 0, 8: 0, 9: 0, 10: 0},
                       'O': {7: 0, 8: 0, 9: 0, 10: 0}},
+             'Maclean': {'M': {7: 0, 8: 0, 9: 0, 10: 0},
+                      'F': {7: 0, 8: 0, 9: 0, 10: 0},
+                      'O': {7: 0, 8: 0, 9: 0, 10: 0}},
+             'Rowallan': {'M': {7: 0, 8: 0, 9: 0, 10: 0},
+                      'F': {7: 0, 8: 0, 9: 0, 10: 0},
+                      'O': {7: 0, 8: 0, 9: 0, 10: 0}},
+             'Somers': {'M': {7: 0, 8: 0, 9: 0, 10: 0},
+                      'F': {7: 0, 8: 0, 9: 0, 10: 0},
+                      'O': {7: 0, 8: 0, 9: 0, 10: 0}},
              'Scouts': {'M': {10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0},
+                        'F': {10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0},
+                        'O': {10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0}},
+             'Boswell': {'M': {10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0},
+                        'F': {10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0},
+                        'O': {10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0}},
+             'Johnson': {'M': {10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0},
+                        'F': {10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0},
+                        'O': {10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0}},
+             'Erasmus': {'M': {10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0},
                         'F': {10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0},
                         'O': {10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0}}}
 
@@ -470,6 +500,19 @@ class Group(object):
                  self.others_in_section('Paget') +
                  self.others_in_section('Garrick')
                  if int(m.age().days / 365) == i])
+            for section in ['Swinfen', 'Paget', 'Garrick']:
+                r[section]['F'][i] = len(
+                    [m for m in
+                     self.girls_in_section(section)
+                     if int(m.age().days / 365) == i])
+                r[section]['M'][i] = len(
+                    [m for m in
+                     self.boys_in_section(section)
+                     if int(m.age().days / 365) == i])
+                r[section]['O'][i] = len(
+                    [m for m in
+                     self.others_in_section(section)
+                     if int(m.age().days / 365) == i])
 
         for i in range(7, 11):
             r['Cubs']['F'][i] = len(
@@ -490,6 +533,19 @@ class Group(object):
                  self.others_in_section('Rowallan') +
                  self.others_in_section('Somers')
                  if int(m.age().days / 365) == i])
+            for section in ['Maclean', 'Rowallan', 'Somers']:
+                r[section]['F'][i] = len(
+                    [m for m in
+                     self.girls_in_section(section)
+                     if int(m.age().days / 365) == i])
+                r[section]['M'][i] = len(
+                    [m for m in
+                     self.boys_in_section(section)
+                     if int(m.age().days / 365) == i])
+                r[section]['O'][i] = len(
+                    [m for m in
+                     self.others_in_section(section)
+                     if int(m.age().days / 365) == i])
 
         for i in range(10, 16):
             r['Scouts']['F'][i] = len(
@@ -510,4 +566,17 @@ class Group(object):
                  self.others_in_section('Boswell') +
                  self.others_in_section('Erasmus')
                  if int(m.age().days / 365) == i])
+            for section in ['Boswell', 'Johnson', 'Erasmus']:
+                r[section]['F'][i] = len(
+                    [m for m in
+                     self.girls_in_section(section)
+                     if int(m.age().days / 365) == i])
+                r[section]['M'][i] = len(
+                    [m for m in
+                     self.boys_in_section(section)
+                     if int(m.age().days / 365) == i])
+                r[section]['O'][i] = len(
+                    [m for m in
+                     self.others_in_section(section)
+                     if int(m.age().days / 365) == i])
         return r

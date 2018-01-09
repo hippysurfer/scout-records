@@ -331,6 +331,26 @@ def census(r, group):
 
     r.sub_title('Census')
 
+    for i in ['Swinfen', 'Paget', 'Garrick',
+              'Maclean', 'Rowallan', 'Somers',
+              'Boswell', 'Johnson', 'Erasmus']:
+        r.t_start(['Section', 'Sex'] +
+                  ["age - {} yrs".format(str(age))
+                   for age in sorted(census_[i]['M'].keys())] +
+                  ['Total'])
+        male_counts = [census_[i]['M'][j] for j in sorted(census_[i]['M'].keys())]
+        r.t_row([i, 'Male'] + male_counts + [sum(male_counts), ])
+
+        female_counts = [census_[i]['F'][j] for j in sorted(census_[i]['F'].keys())]
+        r.t_row([i, 'Female'] + female_counts + [sum(female_counts), ])
+
+        other_counts = [census_[i]['O'][j] for j in sorted(census_[i]['O'].keys())]
+        r.t_row([i, 'Other'] + other_counts + [sum(other_counts), ])
+
+        r.t_end()
+        r.p("Total {} = {}".format(i, sum(male_counts) + sum(female_counts) + sum(other_counts)))
+        r.p("")
+
     for i in ['Beavers', 'Cubs', 'Scouts']:
         r.t_start(['Section', 'Sex'] +
                   ["age - {} yrs".format(str(age))
