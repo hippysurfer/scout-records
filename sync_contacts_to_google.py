@@ -34,6 +34,7 @@ DEF_CACHE = "osm.cache"
 DEF_CREDS = "osm.creds"
 
 GAM = '/home/rjt/bin/gamx/gam'
+GAM_SUBPROCESS_OPTS = {'shell': True, 'universal_newlines': True, 'stderr': subprocess.PIPE}
 # ADMIN_USER = 'admin@7thlichfield.org.uk'
 
 DATETIME = datetime.datetime.now().strftime('%d, %b %Y %H:%M')
@@ -78,6 +79,46 @@ GROUP_MODERATOR_MAP = {
     # Exoficio and Admin can post to all.
     'osm-.*@.*': ['7th-lichfield-admin@7thlichfield.org.uk'],
 }
+
+
+def run_with_input(args, inp, ignore_exc=False):
+    p = subprocess.Popen(
+        args=args,
+        stdin=subprocess.PIPE, stderr=subprocess.PIPE,
+        universal_newlines=True)
+
+    std_out, std_err = p.communicate(input=inp)
+    p.wait()
+    if p.returncode != 0:
+        # an error happened!
+        err_msg = "cmd: {}, \nError: {}. \nCode: {} \nInp: {}".format(
+            repr(args), std_err.strip(), p.returncode, repr(inp)[0:100])
+        log.warning(err_msg)
+        if not ignore_exc:
+            raise Exception(err_msg)
+
+    return std_out
+
+
+def run_with_output(args, default=None):
+    try:
+        out = subprocess.run(args=args,
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE,
+                             check=True,
+                             universal_newlines=True)
+        return out.stdout
+    except subprocess.CalledProcessError as e:
+        print_gam_error(e)
+
+    return default
+
+
+def print_gam_error(exc):
+    print('Error executing GAM command: {} \n'
+          'exit code: {}\n'
+          'stdout: {}\n'
+          'stderr: {}'.format(repr(e.cmd), e.returncode, e.output, e.stderr))
 
 
 def sync_contacts(osm, auth, sections, google_accounts,
@@ -230,11 +271,12 @@ def sync_contacts(osm, auth, sections, google_accounts,
 
     # Now we add each of the contacts to the groups that they are associated with.
 
+    log.info("Fetch members from OSM")
     for section_ in sections:
         for member in group.section_all_members(section_):
             add_member_contacts(section_, Group.SECTION_TYPE[section_], member)
 
-    #for c in contacts.values():
+    # for c in contacts.values():
     #    print(f'{c}')
 
     #  remove duplicates
@@ -251,10 +293,11 @@ def sync_contacts(osm, auth, sections, google_accounts,
     groups = set(groups)
     group_names = [f"{_} (OSM)" for _ in groups]
 
-    contacts = [contact for key,contact in contacts.items()]
+    contacts = [contact for key, contact in contacts.items()]
 
     # Sync up the google groups.
 
+    log.info("Fetch list of groups from google")
     existing_osm_groups = fetch_list_of_groups()
 
     # Fetch the list of group-members - this is used to find who should
@@ -264,7 +307,7 @@ def sync_contacts(osm, auth, sections, google_accounts,
 
     if delete_google_groups:
         for group in existing_osm_groups:
-            print(f"Deleting group: {group}")
+            log.info(f"Deleting group: {group}")
             delete_google_group(group)
         existing_osm_groups = fetch_list_of_groups()  # should return empty
 
@@ -286,6 +329,7 @@ def sync_contacts(osm, auth, sections, google_accounts,
         if len(group_members) == 0:
             log.warning(f'No members in group: {group}')
 
+        log.info(f"Syncing contacts in google group: {group}")
         sync_contacts_in_group(
             group_email_address,
             [_['email'] for _ in group_members])
@@ -294,14 +338,17 @@ def sync_contacts(osm, auth, sections, google_accounts,
             group_email_address, group_moderators, role='manager')
 
     # Sync all contacts to the global directory.
+    log.info("delete OSM contacts in directory")
     delete_osm_contacts_already_in_gam()
 
+    log.info("Create all contacts in directory")
     for contact in contacts:
         create_osm_contact_in_gam(contact)
 
     for google_account in google_accounts:
         if True:  # Flip this to false to manually remove all contacts from the users.
 
+            log.info(f"Syncing OSM contacts into google account for: {google_account}")
             # Setup and sync all contacts and contact groups to a user.
             existing_groups = fetch_list_of_contact_groups(google_account)
             create_contact_groups([_ for _ in group_names if _ not in existing_groups], google_account)
@@ -317,12 +364,13 @@ def sync_contacts(osm, auth, sections, google_accounts,
             delete_osm_contacts_already_in_google(google_account)
             delete_contact_groups(existing_groups, google_account)
 
+    log.info("Finished.")
+
 # $ ~/bin/gamx/gam user admin@7thlichfield.org.uk create contactgroup name 'OSM'
 # ~/bin/gamx/gam user admin@7thlichfield.org.uk create contact familyname "Taylor (OSM)" givenname "Richard" email home "r.taylor@bcs.org.uk" primary contactgroup 'OSM' userdefinedfield 'Section' 'Somers Cubs'
 
 
 def get_group_moderaters(group_email_address, existing_group_members):
-
     managers = []
     for key, val in GROUP_MODERATOR_MAP.items():
         if re.match(key, group_email_address) is not None:
@@ -371,17 +419,20 @@ def create_osm_contact_in_google(contact, google_account):
     for phone in contact['phones']:
         phones.extend(['phone', phone[1], phone[0], 'notprimary'])
 
-    subprocess.run(args=[GAM, 'user', google_account, 'create', 'contact',
-                         'familyname', contact['last'],
-                         'givenname', contact['first'],
-                         'note', note,
-                         'email', 'home', contact['email'], 'primary',
-                         ] + groups + phones, check=True)
+    output = run_with_output(
+        args=[GAM, 'user', google_account, 'create', 'contact',
+              'familyname', contact['last'],
+              'givenname', contact['first'],
+              'note', note,
+              'email', 'home', contact['email'], 'primary',
+              ] + groups + phones)
+
+    return output
 
 
 def create_osm_contact_in_gam(contact):
-    #groups = []
-    #for group in contact['groups']:
+    # groups = []
+    # for group in contact['groups']:
     #    groups.extend(['contactgroup', f'{group} (OSM)'])
     note = "\n".join(contact['yp'])
     note = note + '\n\n' + f'Last synchronized from OSM: {DATETIME}'
@@ -389,19 +440,18 @@ def create_osm_contact_in_gam(contact):
     for phone in contact['phones']:
         phones.extend(['phone', phone[1], phone[0], 'notprimary'])
 
-    subprocess.run(args=[GAM, 'create', 'contact',
-                         'familyname', contact['last'],
-                         'givenname', contact['first'],
-                         'note', note,
-                         'email', 'home', contact['email'], 'primary',
-                         ] + phones, check=True)
+    run_with_output(args=[GAM, 'create', 'contact',
+                          'familyname', contact['last'],
+                          'givenname', contact['first'],
+                          'note', note,
+                          'email', 'home', contact['email'], 'primary',
+                          ] + phones)
 
 
 def fetch_list_of_contact_groups(google_account, field='ContactGroupName'):
-    #~/bin/gamx/gam user admin@7thlichfield.org.uk print contactgroup
-    out = subprocess.run(args=[GAM, 'user', google_account, 'print', 'contactgroup'], stdout=subprocess.PIPE, check=True,
-                         universal_newlines=True)
-    groups = list(csv.DictReader(out.stdout.splitlines()))
+    # ~/bin/gamx/gam user admin@7thlichfield.org.uk print contactgroup
+    out = run_with_output(args=[GAM, 'user', google_account, 'print', 'contactgroup'])
+    groups = list(csv.DictReader(out.splitlines()))
     osm_groups = []
     if len(groups):
         osm_groups = [_[field] for _ in groups if _['ContactGroupName'].endswith('(OSM)')]
@@ -411,10 +461,8 @@ def fetch_list_of_contact_groups(google_account, field='ContactGroupName'):
 
 
 def fetch_list_of_groups(prefix='osm-'):
-    out = subprocess.run(args=[GAM, 'print', 'groups'], stdout=subprocess.PIPE,
-                         check=True,
-                         universal_newlines=True)
-    groups = list(csv.DictReader(out.stdout.splitlines()))
+    out = run_with_output(args=[GAM, 'print', 'groups'])
+    groups = list(csv.DictReader(out.splitlines()))
     osm_groups = []
     if len(groups):
         osm_groups = [_['Email'] for _ in groups if _['Email'].startswith(prefix)]
@@ -426,13 +474,12 @@ def fetch_list_of_groups(prefix='osm-'):
 def fetch_group_members(groups):
     all_members = []
     for group in groups:
-        out = subprocess.run(args=[GAM, 'print', 'group-members',
-                                   'group', group,
-                                   'recursive', 'noduplicates'],
-                             stdout=subprocess.PIPE,
-                             check=True,
-                             universal_newlines=True)
-        group_members = list(csv.DictReader(out.stdout.splitlines()))
+        out = run_with_output(args=[GAM, 'print', 'group-members',
+                                    'group', group,
+                                    'recursive', 'noduplicates'],
+                              default="")
+
+        group_members = list(csv.DictReader(out.splitlines()))
         all_members.extend(group_members)
 
     return all_members
@@ -441,38 +488,28 @@ def fetch_group_members(groups):
 def create_contact_groups(names, google_account):
     #  $ ~/bin/gamx/gam user admin@7thlichfield.org.uk create contactgroup name 'All (OSM)'
     csv_text = to_csv([[_] for _ in names], ['name'])
-    p = subprocess.Popen(stdin=subprocess.PIPE,
-                         args=[GAM, 'csv', '-', 'gam', 'user',
-                               google_account, 'create', 'contactgroup',
-                               'name', '~name'],
-                         universal_newlines=True)
-    p.communicate(input=csv_text)
-    p.wait()
+    run_with_input(args=[GAM, 'csv', '-', 'gam', 'user',
+                         google_account, 'create', 'contactgroup',
+                         'name', '~name'],
+                   inp=csv_text)
 
 
 def delete_contact_groups(group_ids, google_account):
     csv_text = to_csv([[_] for _ in group_ids], ['ContactGroupID'])
-    p = subprocess.Popen(stdin=subprocess.PIPE,
-                       args=[GAM, 'csv', '-', 'gam', 'user', google_account,
-                             'delete', 'contactgroups', '~ContactGroupID'],
-                       universal_newlines=True)
-    p.communicate(input=csv_text)
-    p.wait()
+    run_with_input(args=[GAM, 'csv', '-', 'gam', 'user', google_account,
+                         'delete', 'contactgroups', '~ContactGroupID'],
+                   inp=csv_text)
+
 
 def delete_google_group(group_name):
-    out = subprocess.run(args=[GAM, 'delete', 'group', group_name],
-                         stdout=subprocess.PIPE,
-                         check=True,
-                         universal_newlines=True)
+    run_with_output(args=[GAM, 'delete', 'group', group_name])
 
 
 def sync_contacts_in_group(group, group_members_emails, role='member'):
-    p = subprocess.Popen(stdin=subprocess.PIPE,
-                         args=[GAM, 'update', 'group', group, 'sync',
-                               role, 'file', '-'],
-                         universal_newlines=True)
-    p.communicate(input="\n".join(group_members_emails))
-    p.wait()
+    run_with_input(args=[GAM, 'update', 'group', group, 'sync',
+                         role, 'file', '-'],
+                   inp="\n".join(group_members_emails),
+                   ignore_exc=True)
 
 
 def create_groups(names):
@@ -491,7 +528,7 @@ def create_groups(names):
         'messageModerationLevel': 'MODERATE_NONE',
         'replyTo': 'REPLY_TO_IGNORE',
         'sendMessageDenyNotification': 'true',
-         'messageModerationLevel': 'MODERATE_ALL_MESSAGES',
+        'messageModerationLevel': 'MODERATE_ALL_MESSAGES',
         'whoCanContactOwner': 'ALL_IN_DOMAIN_CAN_CONTACT',
         'messageDisplayFont': 'DEFAULT_FONT',
         'whoCanLeaveGroup': 'ALL_MEMBERS_CAN_LEAVE',
@@ -527,18 +564,15 @@ def create_groups(names):
     keys = [(k, f'~{k}') for k in details[0].keys()]
     fields = [_ for sub_list in keys for _ in sub_list]
     del fields[fields.index('email')]
-    p = subprocess.Popen(stdin=subprocess.PIPE,
-                         args=[GAM, 'csv', '-', 'gam', 'create',
-                               'group'] + fields,
-                         universal_newlines=True)
-    p.communicate(input=csv_text)
-    p.wait()
+    run_with_input(args=[GAM, 'csv', '-', 'gam', 'create',
+                         'group'] + fields,
+                   inp=csv_text)
 
 
 def fetch_osm_contacts_already_in_google(google_account):
     # ~/bin/gamx/gam user admin@7thlichfield.org.uk print contacts
-    out = subprocess.run(args=[GAM, 'user', google_account, 'print', 'contacts'], stdout=subprocess.PIPE, check=True, universal_newlines=True)
-    contacts = list(csv.DictReader(out.stdout.splitlines()))
+    out = run_with_output(args=[GAM, 'user', google_account, 'print', 'contacts'])
+    contacts = list(csv.DictReader(out.splitlines()))
     osm_contacts = [_ for _ in contacts if _['Family Name'].endswith('(OSM)')]
     return osm_contacts
 
@@ -546,36 +580,27 @@ def fetch_osm_contacts_already_in_google(google_account):
 def delete_osm_contacts_already_in_google(google_account):
     # $ ~/bin/gamx/gam user admin@7thlichfield.org.uk delete contacts 2253d1de88ebd5f2
     osm_contacts = fetch_osm_contacts_already_in_google(google_account)
-    p = subprocess.Popen(
-            stdin=subprocess.PIPE,
-            args=[GAM, 'csv', '-', 'gam', 'user', google_account, 'delete', 'contacts', '~contact'],
-            universal_newlines=True)
-
-    csv_text = to_csv([[contact['ContactID'],] for contact in osm_contacts], ['contact'])
-    p.communicate(input=csv_text)
-    p.wait()
+    csv_text = to_csv([[contact['ContactID'], ] for contact in osm_contacts], ['contact'])
+    run_with_input(args=[GAM, 'csv', '-', 'gam', 'user', google_account,
+                         'delete', 'contacts', '~contact'],
+                   inp=csv_text)
 
 
 def fetch_osm_contacts_already_in_gam():
-    out = subprocess.run(args=[GAM, 'print', 'contacts'], stdout=subprocess.PIPE, check=True,
-                         universal_newlines=True)
-    contacts = list(csv.DictReader(out.stdout.splitlines()))
+    out = run_with_output(args=[GAM, 'print', 'contacts'],
+                          default="")
+    contacts = list(csv.DictReader(out.splitlines()))
     osm_contacts = [_ for _ in contacts if _['Family Name'].endswith('(OSM)')]
     return osm_contacts
 
 
 def delete_osm_contacts_already_in_gam():
     osm_contacts = fetch_osm_contacts_already_in_gam()
-    p = subprocess.Popen(
-        stdin=subprocess.PIPE,
-        args=[GAM, 'csv', '-', 'gam', 'delete', 'contacts', '~contact'],
-        universal_newlines=True)
-
     csv_text = to_csv([[contact['ContactID'], ] for contact in osm_contacts],
                       ['contact'])
-    p.communicate(input=csv_text)
-    p.wait()
-
+    run_with_input(
+        args=[GAM, 'csv', '-', 'gam', 'delete', 'contacts', '~contact'],
+        inp=csv_text)
 
 if __name__ == '__main__':
     level = logging.INFO
@@ -594,12 +619,12 @@ if __name__ == '__main__':
         section = args['<section>']
 
         if section == 'Group':
-            sections = Group.YP_SECTIONS + [Group.ADULT_SECTION,]
+            sections = Group.YP_SECTIONS + [Group.ADULT_SECTION, ]
         else:
             assert section in list(Group.SECTIONIDS.keys()) + ['Group'] + list(Group.SECTIONS_BY_TYPE.keys()), \
                 "section must be in {!r}.".format(list(Group.SECTIONIDS.keys()) + ['Group'])
 
-            sections = Group.SECTIONS_BY_TYPE[section] if section in Group.SECTIONS_BY_TYPE.keys() else [section,]
+            sections = Group.SECTIONS_BY_TYPE[section] if section in Group.SECTIONS_BY_TYPE.keys() else [section, ]
 
     term = args['--term'] if args['--term'] else None
 
