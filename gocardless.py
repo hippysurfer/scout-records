@@ -288,6 +288,12 @@ if __name__ == '__main__':
 
     logging.basicConfig(level=level)
     log.debug("Debug On\n")
+    import requests
+    import http.client as http_client
+    # http_client.HTTPConnection.debuglevel = 1
+    requests_log = logging.getLogger("requests.packages.urllib3")
+    requests_log.setLevel(logging.WARN)
+    requests_log.propagate = True
 
     frm = datetime(args['--year'], args['--month'], 4, 0, 0, 0, tzinfo=tzutc())
     to = frm + relativedelta(months=+1)
