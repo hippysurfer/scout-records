@@ -39,7 +39,7 @@ from dateutil.parser import parse
 from dateutil.relativedelta import relativedelta
 from dateutil.tz import tzutc
 from docopt import docopt
-from gc_accounts import SECTION_MAP, DRIVE_FOLDERS
+from gc_accounts import SECTION_MAP, DRIVE_FOLDERS, ACCOUNT_MAP
 from xlsxwriter.utility import xl_rowcol_to_cell
 from gdrive_upload import upload
 
@@ -122,142 +122,152 @@ def fetch_account(token, frm, to):
     return None
 
 
-def export_section(token, name, directory, frm, to):
-    frame = fetch_account(token, frm.isoformat(), to.isoformat())
-    if frame is None:
-        log.warn("No payments found this month for {}".format(name))
-        return None
+def export_sections(token_map, account_map, names, directory, frm, to):
+    frames = []
+    for section_name in names:
+        frame = fetch_account(token_map[section_name], frm.isoformat(), to.isoformat())
+        if frame is None:
+            log.warn("No payments found this month for {}".format(section_name))
+            continue
+        # Add bank account marker
+        frame['acc'] = account_map[section_name]
+        frames.append(frame)
+
+    frame = pd.concat(frames)
 
     cols = frame.columns.tolist()
-    # Reorder the columns so that payment_net is first as it is easier to transcribe onto accounts.
-    frame = frame[cols[:-3] + [cols[-1], cols[-3], cols[-2]]]
-
-    if frame is not None:
-
-        # Create the page that lists each transaction/description. This allows you to see what income type makes up
-        # each payment to the bank account.
-        frame2 = frame.drop(["customer_family_name", "payment_status"], axis=1)
-        group = frame2.groupby(["payout_id", "payout_date", "payment_description"], as_index=False)
-        group2 = group.aggregate(np.sum)
-        group2 = group2.sort_values(by="payout_date", ascending=True)
-
-        # Create the page the lists each transaction as it appears on the bank statement.
-        frame3 = frame2.drop(["payment_description"], axis=1)
-        group3 = frame3.groupby(["payout_date", "payout_id"], as_index=False)
-        group4 = group3.aggregate(np.sum)
-        group4 = group4.sort_values(by="payout_date", ascending=True)
-
-        # Create pivot that has each event as a separate column.
-        frame_cp = frame.copy()
-
-        # Function to rewrite the column names to remove the schedule mame
-        def _(s):
-            subs = re.match('.*Subscriptions.*', s)
-            if subs:
-                return "Subs"
-            m = re.match('(.*)\((.*)\)', s)
-            return m.group(2) if m else s
-
-        frame_cp.payment_description = frame_cp.payment_description.apply(_)
-
-        frame_by_event = frame_cp.drop(["customer_family_name", "payment_status", "payment_amount", "payment_fee"], axis=1)
-        frame_by_event.payment_net = frame_by_event.payment_net.astype(decimal.Decimal)
-        pivot_by_event = frame_by_event.pivot_table(index=['payout_date', 'payout_id'],
-                                                    columns='payment_description',
-                                                    values="payment_net", aggfunc=np.sum)
+    # Reorder the columns so that payment_net is first and bank account is second
+    # as it is easier to transcribe onto accounts.
+    frame = frame[[cols[0], cols[-1]] + cols[1:-4] + [cols[-2], cols[-4], cols[-3]]]
 
 
-        # Turn the index into real columns.
-        pivot_by_event.reset_index(inplace=True)
+    # Create the page that lists each transaction/description. This allows you to see what income type makes up
+    # each payment to the bank account.
+    frame2 = frame.drop(["customer_family_name", "payment_status"], axis=1)
+    group = frame2.groupby(["payout_id", "acc", "payout_date", "payment_description"], as_index=False)
+    group2 = group.aggregate(np.sum)
+    group2 = group2.sort_values(by="payout_date", ascending=True)
 
-        filename = os.path.join(directory, "{} {} {} {} {} GoCardless.xls".format(MONTH_MAP[to.month],
-                                                                                  to.day - 1,
-                                                                                  to.strftime("%b"),
-                                                                                  to.year,
-                                                                                  name))
+    # Create the page the lists each transaction as it appears on the bank statement.
+    frame3 = frame2.drop(["payment_description"], axis=1)
+    group3 = frame3.groupby(["payout_date", "acc", "payout_id"], as_index=False)
+    group4 = group3.aggregate(np.sum)
+    group4 = group4.sort_values(by="payout_date", ascending=True)
 
-        with pd.ExcelWriter(filename,
-                            engine='xlsxwriter',
-                            datetime_format='dd mmmm yyyy') as writer:
-            group4.to_excel(writer, 'By Bank Transaction', index=False)
-            group2.to_excel(writer, 'Banks Transaction Breakdown', index=False)
-            pivot_by_event.to_excel(writer, 'By Event', index=False)
-            frame.to_excel(writer, 'By Payment To GoCardless', index=False)
-            workbook = writer.book
-            bold = workbook.add_format({'bold': True})
+    # Create pivot that has each event as a separate column.
+    frame_cp = frame.copy()
 
-            worksheet = writer.sheets['By Bank Transaction']
-            worksheet.set_zoom(90)
-            worksheet.set_column('A:A', 14)
-            worksheet.set_column('B:B', 22)
-            worksheet.set_column('C:E', 16)
+    # Function to rewrite the column names to remove the schedule mame
+    def _(s):
+        subs = re.match('.*Subscriptions.*', s)
+        if subs:
+            return "Subs"
+        m = re.match('(.*)\((.*)\)', s)
+        return m.group(2) if m else s
 
-            cols = len(group4.columns) - 1
-            rows = len(group4)
-            worksheet.autofilter(0, 0, rows, cols)
-            worksheet.write(rows + 2, cols - 3, "Total", bold)
-            for col in (cols - 2, cols - 1, cols):
-                worksheet.write_formula(rows + 2, col,
-                                        '=SUBTOTAL("109",{}:{})'.format(
-                                            xl_rowcol_to_cell(1, col),
-                                            xl_rowcol_to_cell(rows, col)),
-                                        bold)
+    frame_cp.payment_description = frame_cp.payment_description.apply(_)
 
-            worksheet = writer.sheets['Banks Transaction Breakdown']
-            worksheet.set_zoom(90)
-            worksheet.set_column('A:A', 22)
-            worksheet.set_column('B:B', 12)
-            worksheet.set_column('C:C', 50)
-            worksheet.set_column('D:F', 16)
-            cols = len(group2.columns) - 1
-            rows = len(group2)
-            worksheet.autofilter(0, 0, rows, cols)
-            worksheet.write(rows + 2, cols - 3, "Total", bold)
-            for col in (cols - 2, cols - 1, cols):
-                worksheet.write_formula(rows + 2, col,
-                                        '=SUBTOTAL("109",{}:{})'.format(
-                                            xl_rowcol_to_cell(1, col),
-                                            xl_rowcol_to_cell(rows, col)),
-                                        bold)
-            worksheet = writer.sheets['By Payment To GoCardless']
-            worksheet.set_zoom(90)
-            worksheet.set_column('A:A', 14)
-            worksheet.set_column('B:B', 20)
-            worksheet.set_column('C:C', 21)
-            worksheet.set_column('D:D', 50)
-            worksheet.set_column('E:E', 18)
-            worksheet.set_column('F:H', 16)
-            cols = len(frame.columns) - 1
-            rows = len(frame)
-            worksheet.autofilter(0, 0, rows, cols)
-            worksheet.write(rows + 2, cols - 3, "Total", bold)
-            for col in (cols - 2, cols - 1, cols):
-                worksheet.write_formula(rows + 2, col,
-                                        '=SUBTOTAL("109",{}:{})'.format(
-                                            xl_rowcol_to_cell(1, col),
-                                            xl_rowcol_to_cell(rows, col)),
-                                        bold)
+    frame_by_event = frame_cp.drop(["customer_family_name", "payment_status", "payment_amount", "payment_fee"], axis=1)
+    frame_by_event.payment_net = frame_by_event.payment_net.astype(decimal.Decimal)
+    pivot_by_event = frame_by_event.pivot_table(index=['payout_date', 'payout_id', 'acc'],
+                                                columns='payment_description',
+                                                values="payment_net", aggfunc=np.sum)
 
-            worksheet = writer.sheets['By Event']
-            worksheet.set_zoom(90)
-            worksheet.set_column('A:A', 14)
-            worksheet.set_column('B:B', 22)
-            worksheet.set_column('C:K', 22)
-            cols = len(pivot_by_event.columns) - 1
-            rows = len(pivot_by_event)
-            worksheet.autofilter(0, 0, rows, cols)
-            worksheet.write(rows + 2, cols - 3, "Total", bold)
-            for col in (cols - 2, cols - 1, cols):
-                worksheet.write_formula(rows + 2, col,
-                                        '=SUBTOTAL("109",{}:{})'.format(
-                                            xl_rowcol_to_cell(1, col),
-                                            xl_rowcol_to_cell(rows, col)),
-                                        bold)
 
-            return filename
+    # Turn the index into real columns.
+    pivot_by_event.reset_index(inplace=True)
 
-    else:
-        log.info("{} has not transactions".format(name))
+    name = "Group"
+    filename = os.path.join(directory, "{} {} {} {} {} GoCardless.xls".format(MONTH_MAP[to.month],
+                                                                              to.day - 1,
+                                                                              to.strftime("%b"),
+                                                                              to.year,
+                                                                              name))
+
+    with pd.ExcelWriter(filename,
+                        engine='xlsxwriter',
+                        datetime_format='dd mmmm yyyy') as writer:
+        group4.to_excel(writer, 'By Bank Transaction', index=False)
+        group2.to_excel(writer, 'Banks Transaction Breakdown', index=False)
+        pivot_by_event.to_excel(writer, 'By Event', index=False)
+        frame.to_excel(writer, 'By Payment To GoCardless', index=False)
+        workbook = writer.book
+        bold = workbook.add_format({'bold': True})
+
+        worksheet = writer.sheets['By Bank Transaction']
+        worksheet.set_zoom(90)
+        worksheet.set_column('A:A', 14)
+        worksheet.set_column('B:B', 14)
+
+        worksheet.set_column('C:C', 22)
+        worksheet.set_column('D:F', 16)
+
+        cols = len(group4.columns) - 1
+        rows = len(group4)
+        worksheet.autofilter(0, 0, rows, cols)
+        worksheet.write(rows + 2, cols - 3, "Total", bold)
+        for col in (cols - 2, cols - 1, cols):
+            worksheet.write_formula(rows + 2, col,
+                                    '=SUBTOTAL("109",{}:{})'.format(
+                                        xl_rowcol_to_cell(1, col),
+                                        xl_rowcol_to_cell(rows, col)),
+                                    bold)
+
+        worksheet = writer.sheets['Banks Transaction Breakdown']
+        worksheet.set_zoom(90)
+        worksheet.set_column('A:A', 22)
+        worksheet.set_column('B:B', 10)
+        worksheet.set_column('C:C', 12)
+        worksheet.set_column('D:D', 50)
+        worksheet.set_column('E:G', 16)
+        cols = len(group2.columns) - 1
+        rows = len(group2)
+        worksheet.autofilter(0, 0, rows, cols)
+        worksheet.write(rows + 2, cols - 3, "Total", bold)
+        for col in (cols - 2, cols - 1, cols):
+            worksheet.write_formula(rows + 2, col,
+                                    '=SUBTOTAL("109",{}:{})'.format(
+                                        xl_rowcol_to_cell(1, col),
+                                        xl_rowcol_to_cell(rows, col)),
+                                    bold)
+        worksheet = writer.sheets['By Payment To GoCardless']
+        worksheet.set_zoom(90)
+        worksheet.set_column('A:A', 14)
+        worksheet.set_column('B:B', 10)
+        worksheet.set_column('C:C', 20)
+        worksheet.set_column('D:D', 21)
+        worksheet.set_column('E:E', 50)
+        worksheet.set_column('F:F', 18)
+        worksheet.set_column('G:I', 16)
+        cols = len(frame.columns) - 1
+        rows = len(frame)
+        worksheet.autofilter(0, 0, rows, cols)
+        worksheet.write(rows + 2, cols - 3, "Total", bold)
+        for col in (cols - 2, cols - 1, cols):
+            worksheet.write_formula(rows + 2, col,
+                                    '=SUBTOTAL("109",{}:{})'.format(
+                                        xl_rowcol_to_cell(1, col),
+                                        xl_rowcol_to_cell(rows, col)),
+                                    bold)
+
+        worksheet = writer.sheets['By Event']
+        worksheet.set_zoom(90)
+        worksheet.set_column('A:A', 14)
+        worksheet.set_column('B:B', 10)
+        worksheet.set_column('C:C', 22)
+        worksheet.set_column('D:L', 22)
+        cols = len(pivot_by_event.columns) - 1
+        rows = len(pivot_by_event)
+        worksheet.autofilter(0, 0, rows, cols)
+        worksheet.write(rows + 2, cols - 3, "Total", bold)
+        for col in (cols - 2, cols - 1, cols):
+            worksheet.write_formula(rows + 2, col,
+                                    '=SUBTOTAL("109",{}:{})'.format(
+                                        xl_rowcol_to_cell(1, col),
+                                        xl_rowcol_to_cell(rows, col)),
+                                    bold)
+
+        return filename
 
     return None
 
@@ -300,11 +310,9 @@ if __name__ == '__main__':
 
     log.debug("from: {}, to: {}".format(frm.isoformat(), to.isoformat()))
 
-    for section in args['--section']:
-        token = SECTION_MAP[section]
-        filename = export_section(token, section, args['<outdir>'], frm, to)
+    filename = export_sections(SECTION_MAP, ACCOUNT_MAP, args['--section'], args['<outdir>'], frm, to)
 
-        if args['--upload']:
-            if filename is not None:
-                upload(filename, DRIVE_FOLDERS[section],
-                       filename=os.path.splitext(os.path.split(filename)[1])[0])
+    if args['--upload']:
+        if filename is not None:
+            upload(filename, DRIVE_FOLDERS["Caf"],
+                   filename=os.path.splitext(os.path.split(filename)[1])[0])
