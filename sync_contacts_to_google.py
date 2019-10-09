@@ -118,7 +118,7 @@ def print_gam_error(exc):
     print('Error executing GAM command: {} \n'
           'exit code: {}\n'
           'stdout: {}\n'
-          'stderr: {}'.format(repr(e.cmd), e.returncode, e.output, e.stderr))
+          'stderr: {}'.format(repr(exc.cmd), exc.returncode, exc.output, exc.stderr))
 
 
 def sync_contacts(osm, auth, sections, google_accounts,
@@ -188,7 +188,7 @@ def sync_contacts(osm, auth, sections, google_accounts,
         # Add member data
         email = f1('email1').strip()
         if group.is_leader(member) and not is_valid_email(f1, 'email1'):
-            log.warning(f'{full_name} is a leader but does not have a member email address.')
+            log.warning(f'{full_name} ({section}) is a leader but does not have a member email address.')
 
         if is_valid_email(f1, 'email1'):
             key = '{}-{}-{}'.format(first.lower(), last.lower(), email.lower())
