@@ -18,21 +18,22 @@ Options:
 
 """
 
-from docopt import docopt
 import os.path
 import logging
 import time
-import csv
 import datetime
 import re
-import pandas as pd
 from io import StringIO
-from lxml import etree
 from contextlib import contextmanager
 from functools import lru_cache
 
+from docopt import docopt
+from lxml import etree
 from pyvirtualdisplay import Display
+from selenium.webdriver.chrome.options import Options
 from splinter import Browser
+import pandas as pd
+from gspread_pandas import Spread
 
 log = logging.getLogger(__name__)
 
@@ -238,7 +239,7 @@ def get_parent(member):
             and not member['MumEmail'].startswith('x ')):
         p['title'] = "Ms"
         p['forename'] = member['MumsName'] \
-            if member['MumsName'].strip() != ''\
+            if member['MumsName'].strip() != '' \
             else member['DadsName']
         p['surname'] = member['lastname']
         p['gender'] = 'Unknown'
@@ -248,7 +249,7 @@ def get_parent(member):
     else:
         p['title'] = "Mr"
         p['forename'] = member['DadsName'] \
-            if member['DadsName'].strip() != ''\
+            if member['DadsName'].strip() != '' \
             else member['MumsName']
         p['surname'] = member['lastname']
         p['gender'] = 'Unknown'
@@ -269,8 +270,8 @@ def member2compass(member, section):
 
     j['Membership Number'] = member['Membership']
     j["Look-up Title **"] = 'Mr' \
-                            if (member['Sex'].lower() == 'm' or
-                                member['Sex'].lower() == 'male') else 'Miss'
+        if (member['Sex'].lower() == 'm' or
+            member['Sex'].lower() == 'male') else 'Miss'
     j["Forename(s)**"] = member['firstname'].strip()
     j["Surnames **"] = member['lastname'].strip()
 
@@ -364,7 +365,6 @@ class Compass:
         self._browser = None
         self._record = None
 
-
     def quit(self):
         if self._browser:
             self._browser.quit()
@@ -377,7 +377,10 @@ class Compass:
             "browser.download.dir": self._outdir,
             "browser.helperApps.neverAsk.saveToDisk": "application/octet-stream,application/msexcel,application/csv"}
 
-        self._browser = Browser('chrome') #, profile_preferences=prefs)
+        opt = Options()
+        opt.add_argument('--disable-setuid-sandbox')
+
+        self._browser = Browser('chrome', chrome_options=opt)  # , profile_preferences=prefs)
 
         self._browser.visit('https://compass.scouts.org.uk/login/User/Login')
 
@@ -393,11 +396,25 @@ class Compass:
         self._browser.select('ctl00$UserTitleMenu$cboUCRoles', '1253644')
         time.sleep(1)
 
-    def wait_then_click_xpath(self, xpath, wait_time=30, frame=None):
+    def wait_then_mouse_over_xpath(self, xpath, wait_time=1, frame=None):
         frame = self._browser if frame is None else frame
         while True:
             try:
-                if frame.is_element_present_by_xpath(xpath, wait_time=wait_time):
+                if frame.is_element_visible_by_xpath(xpath, wait_time=wait_time):
+                    frame.find_by_xpath(xpath).mouse_over()
+                    break
+                else:
+                    log.warning("Timeout expired waiting for {}".format(xpath))
+                    time.sleep(1)
+            except:
+                log.warning("Caught exception: ", exc_info=True)
+                raise
+
+    def wait_then_click_xpath(self, xpath, wait_time=1, frame=None):
+        frame = self._browser if frame is None else frame
+        while True:
+            try:
+                if frame.is_element_visible_by_xpath(xpath, wait_time=wait_time):
                     frame.find_by_xpath(xpath).click()
                     break
                 else:
@@ -405,6 +422,7 @@ class Compass:
                     time.sleep(1)
             except:
                 log.warning("Caught exception: ", exc_info=True)
+                raise
 
     def wait_then_click_text(self, text, wait_time=30, frame=None):
         frame = self._browser if frame is None else frame
@@ -433,8 +451,11 @@ class Compass:
     def search(self):
         self.home()
 
+        # Wait for page to settle
+        time.sleep(5)
+
         # Click search button
-        self.wait_then_click_xpath('//*[@id="mn_SB"]')
+        self.wait_then_mouse_over_xpath('//*[@id="mn_SB"]')
         time.sleep(1)
 
         # Click "Find Member(s)"
@@ -449,23 +470,24 @@ class Compass:
             time.sleep(1)
 
     def lookup_member(self, member_number):
-        self.home()
-
-        # Click search button
-        self.wait_then_click_xpath('//*[@id="mn_SB"]')
-        time.sleep(1)
-
         xpath = '//*[@id="CNLookup2"]'
         while True:
             try:
-                if self._browser.is_element_present_by_xpath(xpath, wait_time=30):
+                self.home()
+
+                # Click search button
+                self.wait_then_mouse_over_xpath('//*[@id="mn_SB"]')
+                time.sleep(1)
+
+                if self._browser.is_element_visible_by_xpath(xpath, wait_time=30):
                     self._browser.find_by_xpath(xpath).fill(member_number)
                     break
                 else:
-                    log.warning("Timeout expired waiting for {}".format(xpath))
+                    log.warning("Timeout expired waiting for {} - trying again for ever".format(xpath))
                     time.sleep(1)
             except:
                 log.warning("Caught exception: ", exc_info=True)
+                raise
 
         self.wait_then_click_xpath('//*[@id="mn_QS"]')
 
@@ -484,7 +506,6 @@ class Compass:
         table_xpath = '//*[@id ="{}"]/tbody/tr[not(@style="display: none;")]'.format(table_id)
 
         if self._browser.is_element_present_by_xpath(table_xpath, wait_time=5):
-
             headings = [headers(row) for row
                         in self._browser.find_by_xpath(headers_xpath)][0]
 
@@ -492,15 +513,15 @@ class Compass:
                        in self._browser.find_by_xpath(table_xpath)]
 
             # Extend the length of each row to the same length as the columns
-            records = [row+([None] * (len(headings)-len(row))) for row in records]
+            records = [row + ([None] * (len(headings) - len(row))) for row in records]
 
             # And add dummy columns if we do not have enough headings
-            headings = headings + ["dummy{}".format(_) for _ in range(0,len(records[0]) - len(headings))]
+            headings = headings + ["dummy{}".format(_) for _ in range(0, len(records[0]) - len(headings))]
 
             return pd.DataFrame.from_records(records, columns=headings)
 
         log.warning("Failed to find table {}".format(table_id))
-        return None
+        return pd.DataFrame()
 
     def member_training_record(self, member_number, member_name):
         self.lookup_member(member_number)
@@ -520,7 +541,19 @@ class Compass:
         mandatory_learning['member'] = member_number
         mandatory_learning['name'] = member_name
 
-        return personal_learning_plans, personal_learning_plans, mandatory_learning
+        return personal_learning_plans, training_record, mandatory_learning
+
+    def member_roles(self, member_number, member_name):
+        self.lookup_member(member_number)
+
+        # Select Training record
+        self.wait_then_click_xpath('//*[@id="LBTN3"]')
+
+        roles = self.fetch_table('tbl_p3_roles')
+        roles['member'] = member_number
+        roles['name'] = member_name
+
+        return roles
 
     def member_permits(self, member_number, member_name):
         self.lookup_member(member_number)
@@ -534,6 +567,19 @@ class Compass:
             permits['name'] = member_name
 
         return permits
+
+    def member_disclosures(self, member_number, member_name):
+        self.lookup_member(member_number)
+
+        # Select Permits
+        self.wait_then_click_xpath('//*[@id="LBTN12"]')
+
+        disclosures = self.fetch_table('tbl_p12_disclosures')
+        if disclosures is not None:
+            disclosures['member'] = member_number
+            disclosures['name'] = member_name
+
+        return disclosures
 
     @lru_cache()
     def get_all_adult_trainers(self):
@@ -553,7 +599,7 @@ class Compass:
         # Hack to ensure that all of the search results loaded.
         for i in range(0, 5):
             self._browser.execute_script(
-                'document.getElementById("ctl00_main_working_panel_scrollarea").scrollTop = 100000')
+                'document.getElementById("mstr_scroll").scrollTop = 100000')
             time.sleep(1)
 
         return self.fetch_table('MemberSearch')
@@ -653,13 +699,13 @@ class Compass:
         """Return list of matching records."""
 
         recs = self._records
-        
+
         if ignore_second_name:
             df = recs[
                 (recs.forenames_l.str.lower().str.match(
-                        '^{}.*$'.format(firstname.strip(' ')[0].lower().strip()))) &
-                  (recs.surname_l == lastname.lower().strip())]
-            
+                    '^{}.*$'.format(firstname.strip(' ')[0].lower().strip()))) &
+                (recs.surname_l == lastname.lower().strip())]
+
         else:
             df = recs[(recs.forenames_l == firstname.lower().strip()) &
                       (recs.surname_l == lastname.lower().strip())]
@@ -689,11 +735,13 @@ class Compass:
     def members_with_multiple_membership_numbers(self):
         return [member for s, member in self._records.groupby(
             ['forenames', 'surname']).filter(
-                lambda x: len(x['membership_number'].unique()) > 1).groupby(
-                    ['forenames', 'surname', 'membership_number'])]
+            lambda x: len(x['membership_number'].unique()) > 1).groupby(
+            ['forenames', 'surname', 'membership_number'])]
 
 
 def _main(username, password, sections, outdir):
+    s = Spread(user_creds_or_client="987944788990-1064v1c6jc3afm3t0jf0eb6j47qdrghl.apps.googleusercontent.com",
+               spread="1Mck73LSYIaUgtS7tV3cz4nUpbdyeC5xywYi8bfVb8Lk")
 
     with display():
 
@@ -703,17 +751,53 @@ def _main(username, password, sections, outdir):
         try:
             all = compass.get_all_group_members()
 
-            all[['No', 'Name']][0:2].values.tolist()
+            all_members = all[['No', 'Name']].values.tolist()
 
-            # print(compass.member_permits('00857285'))
-            # print(compass.member_training_record('00857285'))
+            # all_members = all_members[:2]
 
+            disclosures = pd.concat([compass.member_disclosures(no, name) for no, name in
+                                     all_members], sort=False)
+            disclosures = disclosures[disclosures.Status == 'Disclosure Issued']
+            disclosures['Expiry Date'] = pd.to_datetime(disclosures['Expiry Date'], errors='coerce')
+            disclosures = disclosures.set_index(keys=disclosures['Expiry Date'])
+            disclosures = disclosures.sort_index()
+            basedate = pd.Timestamp.today()
+
+            def fnc(x):
+                return -(basedate - x).days
+
+            disclosures['Days left'] = disclosures['Expiry Date'].apply(fnc)
+
+            roles = [compass.member_roles(no, name) for no, name in all_members]
+            roles = pd.concat([_ for _ in roles], sort=False)
+            roles = roles[roles.Status != "Closed"]
+            roles = roles[roles.Role != "Group Occasional Helper [Primary]"]
+
+            training_page = [compass.member_training_record(no, name) for no, name in
+                             roles[['member', 'name']].values.tolist()]
+
+            # roles = pd.concat([_[0] for _ in training_page], sort=False)
+            training = pd.concat([_[1] for _ in training_page], sort=False)
+            mandatory = pd.concat([_[2] for _ in training_page], sort=False)
+
+            mandatory['Renewal Due'] = pd.to_datetime(mandatory['Renewal Due'], errors='coerce')
+            mandatory['Days left'] = mandatory['Renewal Due'].apply(fnc)
+
+            permits = pd.concat([compass.member_permits(no, name) for no, name in
+                                 all_members], sort=False)
+
+            s.df_to_sheet(disclosures, index=False, sheet='Disclosures', start='A1', replace=True)
+            s.df_to_sheet(permits, index=False, sheet='Permits', start='A1', replace=True)
+            s.df_to_sheet(roles, index=False, sheet='Roles', start='A1', replace=True)
+            s.df_to_sheet(training, index=False, sheet='Training', start='A1', replace=True)
+            s.df_to_sheet(mandatory, index=False, sheet='Mandatory', start='A1', replace=True)
 
             time.sleep(1)
             # for section in sections:
             #    compass.export(section)
         finally:
             compass.quit()
+
 
 if __name__ == '__main__':
 
