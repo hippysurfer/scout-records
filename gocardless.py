@@ -45,21 +45,22 @@ from gdrive_upload import upload
 
 log = logging.getLogger(__name__)
 
-MONTH_MAP = {1: "10", 2: "11", 3: "12", 4: "01", 5: "02", 6: "03", 7: "04", 8: "05", 9: "06", 10: "07", 11: "08",
-             12: "09"}
+MONTH_MAP = {
+    1: "10", 2: "11", 3: "12", 4: "01", 5: "02", 6: "03", 7: "04", 8: "05", 9: "06", 10: "07", 11: "08",
+    12: "09"}
 
 from decimal import Decimal, getcontext, ROUND_HALF_UP
 
 # GoCardless appear to apply rounding up.
 getcontext().rounding = ROUND_HALF_UP
 
-GOCARDLESS_FEE = Decimal('0.01')   # 1% per transaction
-GOCARDLESS_LIMIT = Decimal('2.00') # Capped as £2.00
-OSM_FEE = Decimal('0.0195')        # 1.95% per transaction
-OSM_LIMIT = Decimal('Infinity')    # No cap.
+GOCARDLESS_FEE = Decimal('0.01')  # 1% per transaction
+GOCARDLESS_LIMIT = Decimal('2.00')  # Capped as £2.00
+OSM_FEE = Decimal('0.0195')  # 1.95% per transaction
+OSM_LIMIT = Decimal('Infinity')  # No cap.
 
 THREE_PLACES = Decimal('0.001')  # For quantizing to 3 places.
-TWO_PLACES = Decimal('0.01')     # For quantizing to 2 places.
+TWO_PLACES = Decimal('0.01')  # For quantizing to 2 places.
 
 
 def fee(gross_amount, percentage_fee, limit=Decimal('Infinity')):
@@ -89,11 +90,13 @@ def total_fee_at_bank(gross_amounts):
     """Return the total fee for a set of transactions as paid by GoCardless to the bank."""
     return sum([transaction_fee(_) for _ in gross_amounts])
 
+
 def fetch_account(token, frm, to):
     client = gp.Client(access_token=token, environment='live')
     data = []
-    for payout in client.payouts.all(params={"created_at[gt]": frm,
-                                             "created_at[lte]": to}):
+    for payout in client.payouts.all(params={
+        "created_at[gt]": frm,
+        "created_at[lte]": to}):
         for parent in client.events.all(params={"payout": payout.id}):
             for event in client.events.all(params={"parent_event": parent.id}):
                 payment = client.payments.get(event.links.payment)
@@ -127,7 +130,7 @@ def export_sections(token_map, account_map, names, directory, frm, to):
     for section_name in names:
         frame = fetch_account(token_map[section_name], frm.isoformat(), to.isoformat())
         if frame is None:
-            log.warn("No payments found this month for {}".format(section_name))
+            log.warning("No payments found this month for {}".format(section_name))
             continue
         # Add bank account marker
         frame['acc'] = account_map[section_name]
@@ -140,13 +143,35 @@ def export_sections(token_map, account_map, names, directory, frm, to):
     # as it is easier to transcribe onto accounts.
     frame = frame[[cols[0], cols[-1]] + cols[1:-4] + [cols[-2], cols[-4], cols[-3]]]
 
-
     # Create the page that lists each transaction/description. This allows you to see what income type makes up
     # each payment to the bank account.
     frame2 = frame.drop(["customer_family_name", "payment_status"], axis=1)
     group = frame2.groupby(["payout_id", "acc", "payout_date", "payment_description"], as_index=False)
     group2 = group.aggregate(np.sum)
     group2 = group2.sort_values(by="payout_date", ascending=True)
+
+    # Consolidated account headers are:
+    col_order = ['Date', 'Acc', 'Ref', 'Customer', 'Code', 'Level1', 'Level2', 'Level3',
+                 'Level4', 'Level5', 'Description', 'Details', 'Paid In', 'Reconciled(x)', 'Value',
+                 'payment_fee', 'payment_amount']
+
+    # Reorder to make easier to cut and paste into consolidated accounts.
+    group2 = group2.assign(**{col: "" for col in [
+        'Customer', 'Code', 'Level1', 'Level2', 'Level3', 'Level4',
+        'Level5', 'Details', 'Paid In']})
+
+    group2 = group2.assign(**{'Reconciled(x)': 'x'})
+
+    group2.rename(index=str, inplace=True,
+                  columns={
+                      "payout_id": "Ref",
+                      "acc": "Acc",
+                      "payout_date": "Date",
+                      "payment_description": "Description",
+                      "payment_net": "Value"})
+    group2['Paid In'] = group2['Date']
+
+    group2 = group2[col_order]
 
     # Create the page the lists each transaction as it appears on the bank statement.
     frame3 = frame2.drop(["payment_description"], axis=1)
@@ -168,11 +193,10 @@ def export_sections(token_map, account_map, names, directory, frm, to):
     frame_cp.payment_description = frame_cp.payment_description.apply(_)
 
     frame_by_event = frame_cp.drop(["customer_family_name", "payment_status", "payment_amount", "payment_fee"], axis=1)
-    frame_by_event.payment_net = frame_by_event.payment_net.astype(decimal.Decimal)
+    # frame_by_event.payment_net = frame_by_event.payment_net.astype(decimal.Decimal)
     pivot_by_event = frame_by_event.pivot_table(index=['payout_date', 'payout_id', 'acc'],
                                                 columns='payment_description',
                                                 values="payment_net", aggfunc=np.sum)
-
 
     # Turn the index into real columns.
     pivot_by_event.reset_index(inplace=True)
@@ -187,8 +211,8 @@ def export_sections(token_map, account_map, names, directory, frm, to):
     with pd.ExcelWriter(filename,
                         engine='xlsxwriter',
                         datetime_format='dd mmmm yyyy') as writer:
-        group4.to_excel(writer, 'By Bank Transaction', index=False)
         group2.to_excel(writer, 'Banks Transaction Breakdown', index=False)
+        group4.to_excel(writer, 'By Bank Transaction', index=False)
         pivot_by_event.to_excel(writer, 'By Event', index=False)
         frame.to_excel(writer, 'By Payment To GoCardless', index=False)
         workbook = writer.book
@@ -300,6 +324,7 @@ if __name__ == '__main__':
     log.debug("Debug On\n")
     import requests
     import http.client as http_client
+
     # http_client.HTTPConnection.debuglevel = 1
     requests_log = logging.getLogger("requests.packages.urllib3")
     requests_log.setLevel(logging.WARN)
