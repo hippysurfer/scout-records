@@ -166,8 +166,7 @@ def sync_contacts(osm, auth, sections, google_accounts,
         def is_valid_email(func, tag):
             email_ = func(tag).strip()
             return (len(email_) != 0
-                    and (not email_.startswith('x ') and
-                         func("{}_leaders".format(tag)) == "yes"))
+                    and (not email_.startswith('x ')))
 
         def parse_tel(number_field, default_name):
             index = 0
