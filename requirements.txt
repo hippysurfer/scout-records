@@ -3,7 +3,7 @@ docopt==0.6.2
 gocardless-pro==0.3.0
 google-api-python-client==1.6.2
 gspread==0.6.2
-httplib2==0.10.3
+httplib2==0.18.0
 icalendar==3.11.6
 mailchimp3==2.0.11
 numpy==1.12.1
