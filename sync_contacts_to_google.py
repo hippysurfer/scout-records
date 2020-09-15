@@ -10,7 +10,10 @@ contacts as well as syncing them the google global directory.
 Options:
    -t term, --term=term  Term to use
    --delete-groups       Delete and recreate all the google groups.
-   
+   --skip_groups         Do not update the Google Groups.
+   --skip_directory      Do not update the Google Directory.
+   --skip_user_contacts  Do not update any user contact lists.
+   -d             Enable debug
    
 """
 import csv
@@ -33,7 +36,7 @@ log = logging.getLogger(__name__)
 DEF_CACHE = "osm.cache"
 DEF_CREDS = "osm.creds"
 
-GAM = '/home/rjt/bin/gamx/gam'
+GAM = '/home/rjt/bin/gamadv-xtd3/gam'
 GAM_SUBPROCESS_OPTS = {'shell': True, 'universal_newlines': True, 'stderr': subprocess.PIPE}
 # ADMIN_USER = 'admin@7thlichfield.org.uk'
 
@@ -123,8 +126,12 @@ def print_gam_error(exc):
 
 def sync_contacts(osm, auth, sections, google_accounts,
                   csv=False, term=None, no_headers=False,
-                  delete_google_groups=False):
-    group = Group(osm, auth, MAPPING.keys(), term)
+                  delete_google_groups=False,
+                  skip_groups=False,
+                  skip_directory=False,
+                  skip_user_contacts=False):
+
+    group = Group(osm, auth, MAPPING.keys(), term, object_types=(osm.ObjectTypes.MEMBERS,))
     section_map = Group.SECTION_TYPE
     contacts = {}
 
@@ -294,74 +301,77 @@ def sync_contacts(osm, auth, sections, google_accounts,
 
     contacts = [contact for key, contact in contacts.items()]
 
-    # Sync up the google groups.
+    if not skip_groups:
+        # Sync up the google groups.
 
-    log.info("Fetch list of groups from google")
-    existing_osm_groups = fetch_list_of_groups()
+        log.info("Fetch list of groups from google")
+        existing_osm_groups = fetch_list_of_groups()
 
-    # Fetch the list of group-members - this is used to find who should
-    # be managers of the groups.
-    existing_role_group_members = fetch_group_members(
-        fetch_list_of_groups(prefix='7th-'))
+        # Fetch the list of group-members - this is used to find who should
+        # be managers of the groups.
+        existing_role_group_members = fetch_group_members(
+            fetch_list_of_groups(prefix='7th-'))
 
-    if delete_google_groups:
-        for group in existing_osm_groups:
-            log.info(f"Deleting group: {group}")
-            delete_google_group(group)
-        existing_osm_groups = fetch_list_of_groups()  # should return empty
+        if delete_google_groups:
+            for group in existing_osm_groups:
+                log.info(f"Deleting group: {group}")
+                delete_google_group(group)
+            existing_osm_groups = fetch_list_of_groups()  # should return empty
 
-    missing_groups = [_ for _ in groups if
-                      convert_group_name_to_email_address(_) not in existing_osm_groups]
-    if len(missing_groups) > 0:
-        create_groups(missing_groups)
+        missing_groups = [_ for _ in groups if
+                          convert_group_name_to_email_address(_) not in existing_osm_groups]
+        if len(missing_groups) > 0:
+            create_groups(missing_groups)
 
-    for group in groups:
-        group_email_address = convert_group_name_to_email_address(group)
-        group_moderators = get_group_moderaters(group_email_address,
-                                                existing_role_group_members)
-        group_members = [contact for contact in contacts
-                         if (group in contact['groups'] and
-                             contact['email'] not in group_moderators)]
-        if len(group_moderators) == 0:
-            log.warning(f'No managers for group: {group_email_address}')
+        for group in groups:
+            group_email_address = convert_group_name_to_email_address(group)
+            group_moderators = get_group_moderaters(group_email_address,
+                                                    existing_role_group_members)
+            group_members = [contact for contact in contacts
+                             if (group in contact['groups'] and
+                                 contact['email'] not in group_moderators)]
+            if len(group_moderators) == 0:
+                log.warning(f'No managers for group: {group_email_address}')
 
-        if len(group_members) == 0:
-            log.warning(f'No members in group: {group}')
+            if len(group_members) == 0:
+                log.warning(f'No members in group: {group}')
 
-        log.info(f"Syncing contacts in google group: {group}")
-        sync_contacts_in_group(
-            group_email_address,
-            [_['email'] for _ in group_members])
+            log.info(f"Syncing contacts in google group: {group}")
+            sync_contacts_in_group(
+                group_email_address,
+                [_['email'] for _ in group_members])
 
-        sync_contacts_in_group(
-            group_email_address, group_moderators, role='manager')
+            sync_contacts_in_group(
+                group_email_address, group_moderators, role='manager')
 
-    # Sync all contacts to the global directory.
-    log.info("delete OSM contacts in directory")
-    delete_osm_contacts_already_in_gam()
+    if not skip_directory:
+        # Sync all contacts to the global directory.
+        log.info("delete OSM contacts in directory")
+        delete_osm_contacts_already_in_gam()
 
-    log.info("Create all contacts in directory")
-    for contact in contacts:
-        create_osm_contact_in_gam(contact)
+        log.info("Create all contacts in directory")
+        for contact in contacts:
+            create_osm_contact_in_gam(contact)
 
-    for google_account in google_accounts:
-        if True:  # Flip this to false to manually remove all contacts from the users.
+    if not skip_user_contacts:
+        for google_account in google_accounts:
+            if True:  # Flip this to false to manually remove all contacts from the users.
 
-            log.info(f"Syncing OSM contacts into google account for: {google_account}")
-            # Setup and sync all contacts and contact groups to a user.
-            existing_groups = fetch_list_of_contact_groups(google_account)
-            create_contact_groups([_ for _ in group_names if _ not in existing_groups], google_account)
+                log.info(f"Syncing OSM contacts into google account for: {google_account}")
+                # Setup and sync all contacts and contact groups to a user.
+                existing_groups = fetch_list_of_contact_groups(google_account)
+                create_contact_groups([_ for _ in group_names if _ not in existing_groups], google_account)
 
-            delete_osm_contacts_already_in_google(google_account)
+                delete_osm_contacts_already_in_google(google_account)
 
-            for contact in contacts:
-                create_osm_contact_in_google(contact, google_account)
+                for contact in contacts:
+                    create_osm_contact_in_google(contact, google_account)
 
-        else:
-            # To remove all contacts and contact groups from a user.
-            existing_groups = fetch_list_of_contact_groups(google_account, field='ContactGroupID')
-            delete_osm_contacts_already_in_google(google_account)
-            delete_contact_groups(existing_groups, google_account)
+            else:
+                # To remove all contacts and contact groups from a user.
+                existing_groups = fetch_list_of_contact_groups(google_account, field='ContactGroupID')
+                delete_osm_contacts_already_in_google(google_account)
+                delete_contact_groups(existing_groups, google_account)
 
     log.info("Finished.")
 
@@ -464,7 +474,14 @@ def fetch_list_of_groups(prefix='osm-'):
     groups = list(csv.DictReader(out.splitlines()))
     osm_groups = []
     if len(groups):
-        osm_groups = [_['Email'] for _ in groups if _['Email'].startswith(prefix)]
+        try:
+            osm_groups = [_['email'] for _ in groups if _['email'].startswith(prefix)]
+        except KeyError as err:
+            log.error(f"Failed to extract group names from {groups}", exc_info=True)
+            log.error("groups missing email are: {}".format(" ".join(
+                [repr(_) for _ in groups if 'email' not in _]
+            )))
+            raise
     else:
         print("No groups found!")
     return osm_groups
@@ -602,16 +619,17 @@ def delete_osm_contacts_already_in_gam():
         inp=csv_text)
 
 if __name__ == '__main__':
-    level = logging.INFO
-
-    logging.basicConfig(level=level)
-
     # groups = [f"{_} (OSM)" for _ in ['test1', 'test2']]
     # existing_groups = fetch_list_of_contact_groups()
     # for group in [_ for _ in groups if _ not in existing_groups]:
     #     create_contact_group(group)
 
     args = docopt(__doc__, version='OSM 2.0')
+
+    loglevel = logging.DEBUG if args['-d'] else logging.WARN
+    logging.basicConfig(level=loglevel)
+    log.debug("Debug On\n")
+    log.debug(args)
 
     sections = None
     if args['<section>']:
@@ -631,4 +649,7 @@ if __name__ == '__main__':
     auth.load_from_file(open(DEF_CREDS, 'r'))
 
     sync_contacts(osm, auth, sections, args['<google_account>'],
-                  delete_google_groups=args['--delete-groups'])
+                  delete_google_groups=args['--delete-groups'],
+                  skip_groups=args['--skip_groups'],
+                  skip_directory=args['--skip_directory'],
+                  skip_user_contacts=args['--skip_user_contacts'])
