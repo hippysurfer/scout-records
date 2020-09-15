@@ -17,6 +17,7 @@ Options:
   -s=<sectionid> Section ID to query [default: all].
 
 """
+import time
 import traceback
 
 from docopt import docopt
@@ -139,6 +140,28 @@ class Accessor(object):
             log.error("urlopen failed with status code {}: {}, {}".format(
                 result.status_code, url, repr(values)))
             return None
+
+        # Trap if we are exceeding our ratelimit
+
+        ratelimit = int(result.headers['x-ratelimit-limit'])
+        ratelimit_remaining = int(result.headers['x-ratelimit-remaining'])
+        ratelimit_reset_period = int(result.headers['x-ratelimit-reset'])
+
+        if ratelimit_remaining < (ratelimit / 100) * 50:
+            log.warning(f"Reached 50% of OSM ratelimit. "
+                        "(limit={ratelimit}, remaining={ratelimit_remaining}, "
+                        "reset_period={ratelimit_reset_period}")
+        elif ratelimit_remaining < (ratelimit / 100) * 80:
+            log.warning(f"Reached 80% of OSM ratelimit. "
+                        "(limit={ratelimit}, remaining={ratelimit_remaining}, "
+                        "reset_period={ratelimit_reset_period}")
+        elif ratelimit_remaining < (ratelimit / 100) * 95:
+            log.warning(f"Reached 95% of OSM ratelimit. "
+                        "(limit={ratelimit}, remaining={ratelimit_remaining}, "
+                        "reset_period={ratelimit_reset_period}")
+            log.warning(f"Waiting for reset period of {ratelimit_reset_period}s...")
+            time.sleep(ratelimit_reset_period+30)
+            log.warning(f"Finished waiting, carrying on.")
 
         # Crude test to see if the response is JSON
         # OSM returns a string as an error case.
