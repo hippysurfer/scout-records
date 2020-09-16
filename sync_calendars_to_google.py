@@ -14,7 +14,7 @@ from sync_contacts_to_google import to_csv_from_dict
 
 log = logging.getLogger(__name__)
 
-GAM = '/home/rjt/bin/gamx/gam'
+GAM = '/home/rjt/bin/gamadv-xtd3/gam'
 
 # CALENDAR_ID = "7thlichfield.org.uk_gehutke2qdqmkh14cqj96cjsro@group.calendar.google.com"
 
