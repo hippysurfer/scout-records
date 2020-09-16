@@ -154,7 +154,6 @@ class Accessor(object):
                 result.status_code, url, repr(values)))
             return None
 
-
         # Trap if we are exceeding our ratelimit
 
         ratelimit = int(result.headers['x-ratelimit-limit'])
@@ -392,9 +391,8 @@ class Member(OSMObject):
             except:
                 raise KeyError("{!r} object has no attribute {!r}\n"
                                "  Record was {}\n"
-                               "".format(
-                    type(self).__name__, key,
-                    str(self)))
+                               "".format(type(self).__name__, key,
+                                         str(self)))
 
     def __getitem__(self, key):
         try:
@@ -448,16 +446,30 @@ class Members(OSMObject):
 
         members = {}
         for key, member in record['data'].items():
-            # Fetch detailed info for member.
-            url = "ext/customdata/?action=getData&section_id={}".format(
-                int(self._section['sectionid']))
-            # "&section_id={}".format(self._section['sectionid'])
-            fields = {
-                'associated_id': key,
-                'associated_type': 'member',
-                'context': 'members'}
+            # This is the old method of getting the full member data.
+            # # Fetch detailed info for member.
+            # url = "ext/customdata/?action=getData&section_id={}".format(
+            #     int(self._section['sectionid']))
+            # # "&section_id={}".format(self._section['sectionid'])
+            # fields = {
+            #     'associated_id': key,
+            #     'associated_type': 'member',
+            #     'context': 'members'}
+            #
+            # custom_data = self._accessor(url, fields=fields)
 
-            custom_data = self._accessor(url, fields=fields)
+            # This is just a dummy as we are not doing it this way any more.
+            custom_data = {'data': {}}
+
+            # We need to extra all of the custom data in sensibly names keys on the member.
+            # The keynames are constructed from the column map dictionary. This is a two
+            # level dict. We construct a key as identifier.varname and then extract its value
+            # from the main member dict using the group_id and column_id.
+            for column in self._column_map:
+                for field in column['columns']:
+                    value = member['custom_data'][str(column['group_id'])][str(field['column_id'])]
+                    new_key = "{}.{}".format(column['identifier'], field['varname'])
+                    member[new_key] = value
 
             members[key] = MemberClass(
                 osm, section, accessor, member, custom_data['data'])

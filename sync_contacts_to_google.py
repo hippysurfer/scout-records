@@ -104,6 +104,7 @@ def run_with_input(args, inp, ignore_exc=False):
 
 
 def run_with_output(args, default=None):
+    log.debug("Running: {}".format(repr(args)))
     try:
         out = subprocess.run(args=args,
                              stdout=subprocess.PIPE,
