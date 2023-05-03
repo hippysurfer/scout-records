@@ -2,7 +2,7 @@
 """OSM Command Line
 
 Usage:
-   sync_contact_details_to_google [options] <apiid> <token> <section> [<google_account> ...]   
+   sync_contact_details_to_google [options] <section> [<google_account> ...]
 
 If you provide one or more google_accounts the contacts will be added to those accounts as
 contacts as well as syncing them the google global directory.
@@ -619,6 +619,7 @@ def delete_osm_contacts_already_in_gam():
         args=[GAM, 'csv', '-', 'gam', 'delete', 'contacts', '~contact'],
         inp=csv_text)
 
+
 if __name__ == '__main__':
     # groups = [f"{_} (OSM)" for _ in ['test1', 'test2']]
     # existing_groups = fetch_list_of_contact_groups()
@@ -646,8 +647,7 @@ if __name__ == '__main__':
 
     term = args['--term'] if args['--term'] else None
 
-    auth = osm.Authorisor(args['<apiid>'], args['<token>'])
-    auth.load_from_file(open(DEF_CREDS, 'r'))
+    auth = osm.Authorisor(open(DEF_CREDS, 'r'))
 
     sync_contacts(osm, auth, sections, args['<google_account>'],
                   delete_google_groups=args['--delete-groups'],

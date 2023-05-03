@@ -2,9 +2,8 @@
 """Online Scout Manager Interface.
 
 Usage:
-  osm.py <apiid> <token> [-d] [-s=<sectionid>]
-  osm.py <apiid> <token> [-d] [-s=<sectionid>] run <query>
-  osm.py <apiid> <token> [-d] -a <cred_file> <email> <password>
+  osm.py [-c=<client_id>] [-p=<client_secret>] [-d] [-s=<sectionid>]
+  osm.py [-c=<client_id>] [-p=<client_secret>] [-d] [-s=<sectionid>] run <query>
   osm.py (-h | --help)
   osm.py --version
 
@@ -25,13 +24,19 @@ from docopt import docopt
 
 import sys
 import requests_cache
+import requests_oauth2client as oauth2
 import logging
 import datetime
 import dateutil.tz
 import dateutil.parser
 import pytz
 import pprint
-import collections
+
+if sys.version_info.major == 3 and sys.version_info.minor >= 10:
+    from collections.abc import MutableMapping, Sequence
+else:
+    from collections import MutableMapping, Sequence
+
 import os.path
 from os.path import expanduser
 from operator import attrgetter
@@ -39,7 +44,6 @@ from operator import attrgetter
 log = logging.getLogger(__name__)
 pp = pprint.PrettyPrinter(indent=4)
 
-DEF_CACHE = "osm.cache"
 DEF_CREDS = "osm.creds"
 
 TZ = dateutil.tz.gettz("Europe/London")
@@ -62,7 +66,7 @@ class OSMException(Exception):
                                      self._error)
 
 
-class OSMObject(collections.MutableMapping):
+class OSMObject(MutableMapping):
 
     def __init__(self, osm, accessor, record):
         self._osm = osm
@@ -73,8 +77,8 @@ class OSMObject(collections.MutableMapping):
         try:
             return self._record[key]
         except:
-            raise KeyError("%r object has no attribute %r" %
-                           (type(self).__name__, key))
+            raise KeyError("%r object has no attribute %r. %r" %
+                           (type(self).__name__, key, self._record))
 
     def __setitem__(self, key, value):
         try:
@@ -104,27 +108,31 @@ class Accessor(object):
 
     def __init__(self, authorisor):
         self._auth = authorisor
+
+        # self.session = oauth2.requests.Session()
         self._session = requests_cache.CachedSession(
             os.path.join(expanduser("~"), '.osm_request_cache'),
             allowable_methods=('GET', 'POST'),
             include_get_headers=True,
-            expire_after=60 * 60)
+            expire_after=60 * 60
+        )
+        self._session.auth = self._auth.auth
 
     def __call__(self, query, fields=None, authorising=False,
                  clear_cache=False, debug=False, result_type='json'):
-        if clear_cache:
-            self.clear_cache()
+        #if clear_cache:
+        #    self.clear_cache()
 
         url = self.BASE_URL + query
-
-        values = {
-            'apiid': self._auth.apiid,
-            'token': self._auth.token}
-
-        if not authorising:
-            values.update({
-                'userid': self._auth.userid,
-                'secret': self._auth.secret})
+        values = {}
+        # values = {
+        #     'apiid': self._auth.apiid,
+        #     'token': self._auth.token}
+        #
+        # if not authorising:
+        #     values.update({
+        #         'userid': self._auth.userid,
+        #         'secret': self._auth.secret})
 
         if fields:
             values.update(fields)
@@ -160,6 +168,8 @@ class Accessor(object):
         ratelimit_remaining = int(result.headers['x-ratelimit-remaining'])
         ratelimit_reset_period = int(result.headers['x-ratelimit-reset'])
 
+        log.warning(f"Ratelimit remaining: (limit={ratelimit}, remaining={ratelimit_remaining})")
+
         if ratelimit_remaining < (ratelimit / 100) * 50:
             log.warning(f"Reached 50% of OSM ratelimit. "
                         f"(limit={ratelimit}, remaining={ratelimit_remaining}, "
@@ -182,7 +192,7 @@ class Accessor(object):
             try:
                 obj = result.json()
             except:
-                log.warn("Result not JSON because: {0} not in "
+                log.warning("Result not JSON because: {0} not in "
                          "('[', '{{')".format(result.text))
                 raise OSMException(url, values, result)
         else:
@@ -198,32 +208,34 @@ class Accessor(object):
 
 class Authorisor(object):
 
-    def __init__(self, apiid, token):
-        self.apiid = apiid
-        self.token = token
+    def __init__(self, creds_file=None, client_id=None, client_secret=None):
+        if creds_file is not None:
+            self.load_from_file(creds_file)
+        else:
+            self.client_id = client_id
+            self.client_secret = client_secret
+        self.auth = None
+        self.authorise()
 
-        self.userid = None
-        self.secret = None
+    def authorise(self):
+        oauth2client = oauth2.OAuth2Client(
+            token_endpoint="https://www.onlinescoutmanager.co.uk/oauth/token",
+            auth=(self.client_id, self.client_secret),
+            )
 
-    def authorise(self, email, password):
-        fields = {
-            'email': email,
-            'password': password}
-
-        accessor = Accessor(self)
-        creds = accessor("users.php?action=authorise", fields,
-                         authorising=True)
-
-        self.userid = creds['userid']
-        self.secret = creds['secret']
+        self.auth = oauth2.OAuth2ClientCredentialsAuth(
+            oauth2client,
+            scope="section:member:read",
+            resource="https://www.onlinescoutmanager.co.uk/oauth/resource"
+        )
 
     def save_to_file(self, dest):
-        dest.write(self.userid + '\n')
-        dest.write(self.secret + '\n')
+        dest.write(self.client_id + '\n')
+        dest.write(self.client_secret + '\n')
 
     def load_from_file(self, src):
-        self.userid = src.readline()[:-1]
-        self.secret = src.readline()[:-1]
+        self.client_id = src.readline()[:-1]
+        self.client_secret = src.readline()[:-1]
 
 
 class Term(OSMObject):
@@ -271,7 +283,7 @@ class Badge(OSMObject):
               "&section={3}" \
               "&c={4}".format(self._section.term['termid'],
                               self._badge_type,
-                              self._section['sectionid'],
+                              self._section['section_id'],
                               self._section['section'],
                               self.name.lower())
 
@@ -324,7 +336,7 @@ class Member(OSMObject):
                    if group not in custom_groups]
 
         if len(missing) > 0:
-            log.warn("Member record ({}) missing custom groups: {}".fomat(
+            log.warning("Member record ({}) missing custom groups: {}".fomat(
                 " ".join(self['first_name'], self['last_name']),
                 ",".join(missing)))
 
@@ -372,7 +384,7 @@ class Member(OSMObject):
               "section={}" \
               "&sectionid={}&term_id={}".format(
             section_type,
-            int(self._section['sectionid']),
+            int(self._section['section_id']),
             self._section.term['termid'])
 
         badge_data = self._accessor(url)
@@ -418,7 +430,7 @@ class Member(OSMObject):
     #     return ret
 
 
-class Users(collections.Sequence):
+class Users(Sequence):
 
     def __init__(self, osm, section, accessor, record):
         if record:
@@ -449,8 +461,8 @@ class Members(OSMObject):
             # This is the old method of getting the full member data.
             # # Fetch detailed info for member.
             # url = "ext/customdata/?action=getData&section_id={}".format(
-            #     int(self._section['sectionid']))
-            # # "&section_id={}".format(self._section['sectionid'])
+            #     int(self._section['section_id']))
+            # # "&section_id={}".format(self._section['section_id'])
             # fields = {
             #     'associated_id': key,
             #     'associated_type': 'member',
@@ -490,7 +502,7 @@ class Members(OSMObject):
             return False
 
 
-class Movers(collections.Sequence):
+class Movers(Sequence):
 
     def __init__(self, osm, section, accessor, headers, data):
         self._osm = osm,
@@ -591,7 +603,7 @@ class Event(OSMObject):
               "&sectionid={0}" \
               "&termid={1}" \
               "&eventid={2}" \
-            .format(section['sectionid'],
+            .format(section['section_id'],
                     section.term['termid'],
                     self['eventid'])
 
@@ -602,7 +614,7 @@ class Event(OSMObject):
               "&sectionid={0}" \
               "&termid={1}" \
               "&eventid={2}" \
-            .format(section['sectionid'],
+            .format(section['section_id'],
                     section.term['termid'],
                     self['eventid'])
 
@@ -616,7 +628,7 @@ class Event(OSMObject):
         )
 
 
-class Events(collections.Sequence):
+class Events(Sequence):
 
     def __init__(self, osm, section, accessor, record):
         if record:
@@ -654,11 +666,11 @@ class Meeting(OSMObject):
             self.start_time = dateutil.parser.parse(
                 pyTZ.localize(self.start_time).strftime(FMT))
         except:
-            # log.warn("Failed to interpret starttime ({}). Using 12:00:00. "
+            # log.warning("Failed to interpret starttime ({}). Using 12:00:00. "
             #          "section: {}\n"
             #          "record = {}\n error = {}".format(
             #                 self._record['starttime'],
-            #                 section['sectionname'],
+            #                 section['section_name'],
             #                 repr(record),
             #                 traceback.print_exc()))
             self.start_time = datetime.datetime.combine(
@@ -675,11 +687,11 @@ class Meeting(OSMObject):
             self.end_time = dateutil.parser.parse(
                 pyTZ.localize(self.end_time).strftime(FMT))
         except:
-            # log.warn("Failed to interpret endtime ({}). Using starttime. "
+            # log.warning("Failed to interpret endtime ({}). Using starttime. "
             #          "section: {}\n"
             #          "record = {}\n error = {}".format(
             #                 self._record['endtime'],
-            #                 section['sectionname'],
+            #                 section['section_name'],
             #                 repr(record),
             #                 traceback.print_exc()))
             self.end_time = self.start_time
@@ -710,10 +722,10 @@ class Programme(OSMObject):
                         event['meetingdate'])] = Meeting(osm, section,
                                                          accessor, event)
             except:
-                log.warn("Failed to process events in programme for "
+                log.warning("Failed to process events in programme for "
                          "section: {0}\n"
                          "record = {1}\n error = {2}".format(
-                    section['sectionname'],
+                    section['section_name'],
                     repr(record),
                     traceback.print_exc()))
 
@@ -757,33 +769,33 @@ class Section(OSMObject):
     def init(self):
         log.debug("Requested term = {}".format(self.requested_term))
 
-        self.all_terms = [term for term in self._osm.terms(self['sectionid'])]
+        self.all_terms = [term for term in self._osm.terms(self['section_id'])]
         log.debug("All terms = {!r}".format(self.all_terms))
 
         if self.requested_term is not None:
             # We have requested a specific term.
-            self.terms = [term for term in self._osm.terms(self['sectionid'])
+            self.terms = [term for term in self._osm.terms(self['section_id'])
                           if term['name'].strip() == self.requested_term.strip()]
 
             if len(self.terms) != 1:
-                log.warn("Requested term ({}) for section {} is not in available "
+                log.warning("Requested term ({}) for section {} is not in available "
                          "terms ({})".format(
                     self.requested_term,
                     ",".join([term['name'] for term in self.terms]),
-                    self['sectionname']))
+                    self['section_name']))
                 # sys.exit(1)
         elif self.requested_date is not None:
             # We have requested a specific date. Need to find the term that encloses that date.
-            self.terms = [term for term in self._osm.terms(self['sectionid'])
+            self.terms = [term for term in self._osm.terms(self['section_id'])
                           if term.is_active(self.requested_date)]
 
             if len(self.terms) != 1:
-                log.warn("Cannot find a term that encloses the requested date ({})"
+                log.warning("Cannot find a term that encloses the requested date ({})"
                          "for section {} terms ({})".format(
                     self.requested_date,
-                    self['sectionname'], ",".join([term['name'] for term in self.terms]), ))
+                    self['section_name'], ",".join([term['name'] for term in self.terms]), ))
         else:
-            self.terms = [term for term in self._osm.terms(self['sectionid'])
+            self.terms = [term for term in self._osm.terms(self['section_id'])
                           if term.is_active()]
 
             log.debug("Active terms = {!r}".format(self.terms))
@@ -791,7 +803,7 @@ class Section(OSMObject):
             if len(self.terms) > 1:
                 log.error("{!r}: More than 1 term is active, picking "
                           "last in list {!r}".format(
-                    self['sectionname'],
+                    self['section_name'],
                     [(term['name'], term['past']) for
                      term in self.terms]))
 
@@ -816,48 +828,53 @@ class Section(OSMObject):
             try:
                 self.members = self._get_members()
             except:
-                log.warn("Failed to get members for section {0}"
-                         .format(self['sectionname']), exc_info=True)
+                log.warning("Failed to get members for section {0}"
+                            .format(self['section_name']), exc_info=True)
                 self.members = []
+                raise
 
         if ObjectTypes.PROGRAMME in self.object_types:
             if self.term:
                 try:
                     self.programme = self._get_programme()
                 except:
-                    log.warn("Failed to get programme for section {0}"
-                             .format(self['sectionname']),
-                             exc_info=True)
+                    log.warning("Failed to get programme for section {0}"
+                                .format(self['section_name']),
+                                 exc_info=True)
+                    raise
 
         if ObjectTypes.EVENTS in self.object_types:
             try:
                 self.events = self._get_events()
             except:
-                log.warn("Failed to get events for section {0}"
-                         .format(self['sectionname']),
-                         exc_info=True)
+                log.warning("Failed to get events for section {0}"
+                             .format(self['section_name']),
+                             exc_info=True)
+                raise
 
         if ObjectTypes.USERS in self.object_types:
             try:
                 self.users = self._get_users()
             except:
-                log.warn("Failed to get users for section {0}"
-                         .format(self['sectionname']),
-                         exc_info=True)
+                log.warning("Failed to get users for section {0}"
+                             .format(self['section_name']),
+                              exc_info=True)
+                raise
 
         if ObjectTypes.MOVERS in self.object_types:
             try:
                 self.movers = self._get_movers()
             except:
-                log.warn("Failed to get movers for section {0}"
-                         .format(self['sectionname']),
-                         exc_info=True)
+                log.warning("Failed to get movers for section {0}"
+                             .format(self['section_name']),
+                              exc_info=True)
+                raise
 
     def __repr__(self):
         return 'Section({0}, "{1}", "{2}")'.format(
-            self['sectionid'],
-            self['sectionname'],
-            self['section'])
+            self['section_id'],
+            self['section_name'],
+            self['section_type'])
 
     def _get_badges(self, badge_type):
         url = "challenges.php?action=getInitialBadges" \
@@ -866,8 +883,8 @@ class Section(OSMObject):
               "&section={2}" \
               "&termid={3}" \
             .format(badge_type,
-                    self['sectionid'],
-                    self['section'],
+                    self['section_id'],
+                    self['section_type'],
                     self.term['termid'])
 
         return Badges(self._osm, self._accessor,
@@ -880,7 +897,7 @@ class Section(OSMObject):
         url = "ext/events/summary/?action=get" \
               "&sectionid={0}" \
               "&termid={1}" \
-            .format(self['sectionid'],
+            .format(self['section_id'],
                     self.term['termid'])
 
         return Events(self._osm, self, self._accessor,
@@ -888,7 +905,7 @@ class Section(OSMObject):
 
     def _get_users(self):
         url = "ext/settings/access/?action=getUsersForSection" \
-              "&sectionid={0}".format(self['sectionid'])
+              "&sectionid={0}".format(self['section_id'])
 
         return Users(self._osm, self, self._accessor,
                      self._accessor(url))
@@ -896,30 +913,30 @@ class Section(OSMObject):
     def _get_movers(self):
         # Get the list of flexi record tables and look for "Moving On"
         flexi_url = ('ext/members/flexirecords/?action=getFlexiRecords'
-                     '&sectionid={}&archived=n'.format(self['sectionid']))
+                     '&sectionid={}&archived=n'.format(self['section_id']))
         flexi_records = self._accessor(flexi_url)
 
         if not flexi_records:
-            log.warn("Can't access flexi records for {}"
-                     .format(self['sectionname']))
+            log.warning("Can't access flexi records for {}"
+                     .format(self['section_name']))
             return None
 
         moving_on_table = [item for item in flexi_records['items']
                            if item['name'] == 'Moving On']
 
         if not moving_on_table:
-            log.warn("No movers table for section {} ({})"
-                     .format(self['sectionname'], self['sectionid']))
+            log.warning("No movers table for section {} ({})"
+                     .format(self['section_name'], self['section_id']))
             return []
 
         headers = self._accessor(('ext/members/flexirecords/?action=getStructure'
-                                  '&sectionid={}&extraid={}'.format(self['sectionid'],
+                                  '&sectionid={}&extraid={}'.format(self['section_id'],
                                                                     moving_on_table[0]['extraid'])))
 
         data = self._accessor(('ext/members/flexirecords/?action=getData&extraid={}&'
                                'sectionid={}&termid={}'
                                '&section=cubs'.format(moving_on_table[0]['extraid'],
-                                                      self['sectionid'],
+                                                      self['section_id'],
                                                       self.term['termid'])))
 
         if headers and data:
@@ -933,30 +950,30 @@ class Section(OSMObject):
               "&term_id={1}" \
               "&dateFormat=uk" \
               "&section={2}" \
-            .format(self['sectionid'],
+            .format(self['section_id'],
                     self.term['termid'],
-                    self['section'])
+                    self['section_type'])
 
         return Members(self._osm, self, self._accessor,
                        self._accessor(url))
 
     def _get_programme(self):
         url = "programme.php?action=getProgrammeSummary" \
-              "&sectionid={0}&termid={1}".format(self['sectionid'],
+              "&sectionid={0}&termid={1}".format(self['section_id'],
                                                  self.term['termid'])
 
         return Programme(self._osm, self, self._accessor,
                          self._accessor(url))
 
     def get_terms(self):
-        return [term for term in self._osm.terms(self['sectionid'])]
+        return [term for term in self._osm.terms(self['section_id'])]
 
     def get_payments(self, start, end):
         url = "/ext/finances/onlinepayments/?action=exportWithdrawals" \
               "&sectionid={0}" \
               "&start={1}" \
               "&end={2}" \
-            .format(self['sectionid'],
+            .format(self['section_id'],
                     start, end)
 
         return self._accessor(url, result_type='csv')
@@ -975,7 +992,9 @@ class OSM(object):
         self.init(sectionid_list, term, on_date)
 
     def init(self, sectionid_list=False, term=None, on_date=None):
-        roles = self._accessor('api.php?action=getUserRoles')
+        #roles = self._accessor('api.php?action=getUserRoles')
+        roles = self._accessor._session.get("https://www.onlinescoutmanager.co.uk/oauth/resource").json()
+        roles = roles['data']['sections']
 
         self.sections = {}
 
@@ -983,18 +1002,19 @@ class OSM(object):
                                 init=False, term=term, on_date=on_date,
                                 object_types=self.object_types)
                         for role in roles
-                        if 'section' in role]:
+                        #if 'section' in role
+                        ]:
             if sectionid_list is False or \
-                    section['sectionid'] in sectionid_list:
+                    str(section['section_id']) in sectionid_list:
                 section.init()
-                self.sections[section['sectionid']] = section
+                self.sections[str(section['section_id'])] = section
 
-                if section['isDefault'] == '1':
-                    self.section = section
-                    log.info("Default section = {0}, term = {1}".format(
-                        self.section['sectionname'],
-                        self.section.term['name'] if self.section.term
-                        else "None"))
+                # if section['isDefault'] == '1':
+                #     self.section = section
+                #     log.info("Default section = {0}, term = {1}".format(
+                #         self.section['section_name'],
+                #         self.section.term['name'] if self.section.term
+                #         else "None"))
 
         if self.section is None:
             self.section = list(self.sections.values())[-1]
@@ -1003,17 +1023,18 @@ class OSM(object):
         # selected selections.
 
         if any([section.term is None for section in self.sections.values()]):
-            log.warn("Term not set for at least one section")
+            log.warning("Term not set for at least one section")
         elif len(set([section.term['name'].strip() for section in
                       self.sections.values()])) != 1:
-            log.warn("Not all sections have the same active term: \n "
+            log.warning("Not all sections have the same active term: \n "
                      "{}".format(
                 "\n".join(
                     ["{} - {}".format(
-                        section['sectionname'], section.term['name'])
+                        section['section_name'], section.term['name'])
                         for section in self.sections.values()])))
 
     def terms(self, sectionid):
+        sectionid = sectionid if type(sectionid) is str else str(sectionid)
         terms = self._accessor('api.php?action=getTerms')
         if sectionid in terms:
             return [Term(self, self._accessor, term) for term
@@ -1031,30 +1052,20 @@ if __name__ == '__main__':
     log.debug("Debug On\n")
     log.debug(args)
 
-    try:
-        Accessor.__cache_load__(open(DEF_CACHE, 'rb'))
-    except:
-        log.debug("Failed to load cache file\n")
+    sectionid_list = [args['-s'], ] if args['-s'] else [20706]
 
-    if args['-a']:
-        auth = Authorisor(args['<apiid>'], args['<token>'])
-        auth.authorise(args['<email>'],
-                       args['<password>'])
-        auth.save_to_file(open(args['<cred_file>'], 'w'))
-        sys.exit(0)
+    #client_id = ''
+    #client_secret = ''
 
-    sectionid_list = [args['-s'], ] if args['-s'] else False
-
-    auth = Authorisor(args['<apiid>'], args['<token>'])
-    auth.load_from_file(open(DEF_CREDS, 'r'))
+    auth = Authorisor(open(DEF_CREDS, 'r'))
 
     if args['run']:
         accessor = Accessor(auth)
 
         pp.pprint(accessor(args['<query>']))
 
-    osm = OSM(auth, sectionid_list)
-    test_section = args['-s'] if args['-s'] else '15797'
+    osm = OSM(auth, sectionid_list, None, None, object_types=(ObjectTypes.MEMBERS, ))
+    test_section = args['-s'] if args['-s'] else 20706
     members = osm.sections[test_section].members
 
     # import pdb
@@ -1088,4 +1099,4 @@ if __name__ == '__main__':
     # for k,v in osm.sections['14324'].challenge.items():
     #    log.debug("{0}: {1}".format(k,v.keys()))
 
-    Accessor.__cache_save__(open(DEF_CACHE, 'wb'))
+    #Accessor.__cache_save__(open(DEF_CACHE, 'wb'))

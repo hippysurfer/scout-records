@@ -15,6 +15,7 @@ python-dateutil
 pytz
 requests
 requests-cache
+requests-oauth2client
 rsa
 six
 tabulate

@@ -32,23 +32,26 @@ osm.MemberClass = Member
 
 
 class Group(object):
-    SECTIONIDS = OrderedDict((('Paget', '9960'),
-                              ('Swinfen', '17326'),
-                              ('Garrick', '20711'),
-                              ('Maclean', '14324'),
-                              ('Rowallan', '12700'),
-                              ('Somers', '20706'),
-                              ('Boswell', '10363'),
-                              ('Johnson', '5882'),
-                              ('Erasmus', '20707'),
-                              ('Adult', '18305'),
-                              ('Subs', '33593')))
+    SECTIONIDS = OrderedDict((
+        ('Saturn', '69414'),
+        ('Paget', '9960'),
+        ('Swinfen', '17326'),
+        ('Garrick', '20711'),
+        ('Maclean', '14324'),
+        ('Rowallan', '12700'),
+        ('Somers', '20706'),
+        ('Boswell', '10363'),
+        ('Johnson', '5882'),
+        ('Erasmus', '20707'),
+        ('Adult', '18305'),
+        ('Subs', '33593')))
     # 'Waiting List': ""}
 
     ADULT_SECTION = 'Adult'
     SUBS_SECTION = "Subs"
 
-    YP_SECTIONS = ['Paget',
+    YP_SECTIONS = ['Saturn',
+                   'Paget',
                    'Swinfen',
                    'Garrick',
                    'Maclean',
@@ -61,6 +64,7 @@ class Group(object):
     SECTION_TYPE = {
         'Adult': 'adult',
         'Subs': 'adult',
+        'Saturn': 'squirrels',
         'Paget': 'beavers',
         'Swinfen': 'beavers',
         'Maclean': 'cubs',
@@ -74,11 +78,13 @@ class Group(object):
 
     # Create a reverse mapping of the Sections to their types.
     SECTIONS_BY_TYPE = OrderedDict((
+        ('squirrels', ['Saturn']),
         ('beavers', ['Paget', 'Swinfen', 'Garrick']),
         ('cubs', ['Maclean', 'Rowallan', 'Somers']),
         ('scouts', ['Boswell', 'Johnson', 'Erasmus'])))
 
     MIN_AGE = {
+        'Saturn': 4,
         'Swinfen': 5,
         'Paget': 5,
         'Garrick': 5,
@@ -91,6 +97,7 @@ class Group(object):
     }
 
     MAX_AGE = {
+        'Saturn': 6,
         'Swinfen': 8,
         'Paget': 8,
         'Garrick': 8,
